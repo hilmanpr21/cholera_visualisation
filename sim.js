@@ -73,4 +73,4 @@ function animate() {
 }
 
 // start animation by calling
-animate()
+animate() 
