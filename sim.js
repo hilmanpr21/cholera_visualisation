@@ -47,9 +47,27 @@ function drawScene() {
 function drawAgent(agentInput) {
     ctx.beginPath();
     ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
-    ctx.fillStyle = 'pink';
+    
+    switch (agentInput.state) {
+        case "susceptible":
+            ctx.fillStyle = "pink";
+            break;
+        
+        case "exposed":
+            ctx.fillStyle = "orange";
+            break;
+
+        case "infected" :
+            ctx.fillStyle = "red";
+            break;
+
+        case "recovered" :
+            ctx.fillStyle = "purple";
+            break;
+    }
+
     ctx.fill();
-    //ctx.stroke();
+    ctx.stroke();
     ctx.closePath();
 }
 
@@ -84,7 +102,7 @@ function updateAgentState(agentInput, deltaTime) {
                 agentInput.statetimer = 0;          // Set the timer to 0 again
             }
             break;
-        case "recover":
+        case "recovered":
             agentInput.statetimer += deltaTime;
             if (agentInput.statetimer >= 200) {     // checking the condition where the agent have been int he recovered state more than 200 seconds
                 agentInput.state = "susceptible";   // change the state to susceptible
@@ -92,6 +110,15 @@ function updateAgentState(agentInput, deltaTime) {
             }
             break;
     }
+}
+
+// Get the deltaTime to calculate how long the agent have been on that state
+let lastTime = performance.now();       // Define the lastTime object with timestamp from `performance.now()` for the initial value
+
+function getDeltaTime(currentTimeInput) {
+    let deltaTime = (currentTimeInput - lastTime) / 1000;       // divided to 1000 to change the unit of deltaTime from milisecond to second
+    lastTime = currentTimeInput;                                // Assign new lastTime with currentTime for the next frame calculation
+    return deltaTime;                                           // Return the result of deltatime
 }
 
 // Logic detect contacting contaminated waterbody
@@ -120,42 +147,13 @@ function changeToExposed(agentInput) {
 
 
 // Render the canvas in loop
-let lastTime = performance.now(); // initialise last frame time
-
 function animate(currentTime) {
-    let deltaTime = (currentTime - lastTime) / 1000; // ms to seconds
-    lastTime = currentTime;
-
-    changeToExposed(agent);
-    updateAgentMovement(agent);
-    updateAgentState(agent, deltaTime);
-    drawScene();
-
-    requestAnimationFrame(animate);
-}
-requestAnimationFrame(animate);
-
-function drawAgent(agent) {
-    ctx.beginPath();
-    ctx.arc(agent.x, agent.y, agent.radius, 0, 2 * Math.PI);
-
-    switch (agent.state) {
-        case "susceptible":
-            ctx.fillStyle = "pink";
-            break;
-        case "exposed":
-            ctx.fillStyle = "orange";
-            break;
-        case "infected":
-            ctx.fillStyle = "red";
-            break;
-        case "recovered":
-            ctx.fillStyle = "green";
-            break;
-    }
-
-    ctx.fill();
-    ctx.closePath();
+    const deltaTime = getDeltaTime(currentTime)     // to calculate the deltaTime
+    changeToExposed(agent);                         // to change from susceptible to exposed
+    updateAgentMovement(agent);                     // to call control agent movement
+    updateAgentState(agent, deltaTime);             // to chaneg the SEIR state
+    drawScene();                                    // To draw the frame
+    requestAnimationFrame(animate);                 // To schedule next frame (re-run animation)
 }
 
 
