@@ -26,10 +26,10 @@ function createAgent(){
                 valid = false;
                 break;
             }
+        }
         if (x <= radius || x >=canvas.width - radius || y <= radius || y >=canvas.height -radius) {
             valid = false;
             break;
-        }
         }
     }
     return {
@@ -179,7 +179,9 @@ function touchingContaminatedWater(agentInput) {
         // check if the agent is touching waterbody or not
         // contaminted water body has radius 40
         // if the distance between centres is less than the total of waterbody's radius and agent's radius, it means it is touching or even overlap
-        return distance <= 40 + agentInput.radius;
+        if (distance <= waterbodies.radius + agentInput.radius) {
+            return true;
+        }
     }
 }
 
@@ -203,9 +205,92 @@ function animate(currentTime) {
     })
     
     drawScene();                                    // To draw the frame
+
+    // call to count SEIR data over time
+    timeAccumulator += deltaTime;                   // to calculate how long the simulation running
+    if (timeAccumulator >= logInterval){
+        countSEIRStates();                          // calling the function to log the SEIR count
+        timeAccumulator = 0;
+    }
+
     requestAnimationFrame(animate);                 // To schedule next frame (re-run animation)
+    
 }
+
+// TRACK SEIR STATE COUNTS OVER TIME
+// create global array to store SEIr count over time
+const SEIRDataOverTime = [];
+
+// How often in second the log SEIR counts
+const logInterval = 0.5; //in second
+let timeAccumulator = 0; // set initial time
+
+// Function to cout SEIR states
+function countSEIRStates() {
+    const count = {
+        time: parseFloat((performance.now() / 1000).toFixed(1)), // this change milli second to second#
+        susceptible: 0,
+        exposed: 0,
+        infected: 0,
+        recovered: 0
+    };
+    for (const agent of agents) {
+        count[agent.state]++;
+    }
+    SEIRDataOverTime.push(count);
+    console.log("SEIR Count at t =", count.time, count);
+    drawSEIRChart(SEIRDataOverTime); // << add this
+}
+
+// MAKE THE CHART
+function drawSEIRChart(data) {
+    const svg = d3.select("#seirChart");
+    const width = +svg.attr("width");
+    const height = +svg.attr("height");
+    svg.selectAll("*").remove(); // clear old chart
+
+    const keys = ["susceptible", "exposed", "infected", "recovered"];
+
+    const stackedData = d3.stack().keys(keys)(data);
+
+    const x = d3.scaleLinear()
+        .domain(d3.extent(data, d => d.time))
+        .range([40, width - 10]);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => keys.reduce((sum, k) => sum + d[k], 0))])
+        .range([height - 20, 10]);
+
+    const color = d3.scaleOrdinal()
+        .domain(keys)
+        .range(["pink", "orange", "red", "purple"]);
+
+    const area = d3.area()
+        .x(d => x(d.data.time))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+
+    svg.selectAll("path")
+        .data(stackedData)
+        .join("path")
+        .attr("fill", d => color(d.key))
+        .attr("d", area);
+
+     // Add x-axis
+    svg.append("g")
+        .attr("transform", `translate(0,${height - 20})`)
+        .call(d3.axisBottom(x));
+
+    // Add y-axis
+    svg.append("g")
+        .attr("transform", `translate(40,0)`)
+        .call(d3.axisLeft(y));
+}
+
 
 
 // start animation by calling
 animate() 
+
+// to update chart every few second
+setInterval(() => drawSEIRChart(SEIRDataOverTime), 1000);
