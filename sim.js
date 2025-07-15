@@ -6,12 +6,11 @@ let agent = {
     x: 10,      // starting x position
     y: 100,     // starting y position 
     radius: 10,  // the agent cirle radius size
-    vx: 1,      // velocity in x (pixels per frame)
-    vy: 4,      // velocity in y (pixels per frame)   
+    vx: 2,      // velocity in x (pixels per frame)
+    vy: 3,      // velocity in y (pixels per frame)   
     state: "susceptible", // initial state of SEIR
     statetimer: 0, // define how many secons in this current state
 };
-
 
 function drawScene() {
     
