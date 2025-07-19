@@ -14,24 +14,29 @@ const contaminatedWaterbodies = [
 function createAgent(){
     const radius = 10;
     let x, y, valid = false;
+
     while (!valid) {
         x = Math.random() * (canvas.width - 2 * radius) + radius;
         y = Math.random() * (canvas.height - 2 * radius) + radius;
         valid = true;
+
+        // check waterbody collision
         for (const waterbody of contaminatedWaterbodies) {
             const dx = x - waterbody.x;
             const dy = y - waterbody.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            if (distance < waterbody.radius + 10) { // 10 is agent radius
+            if (distance < waterbody.radius + radius + 5) {
                 valid = false;
                 break;
             }
         }
-        if (x <= radius || x >=canvas.width - radius || y <= radius || y >=canvas.height -radius) {
+
+        // Check boundaries
+        if (x <= radius || x >= canvas.width - radius || y <= radius || y >= canvas.height - radius) {
             valid = false;
-            break;
         }
     }
+    
     return {
         x,      // starting x position
         y,     // starting y position 
@@ -43,10 +48,9 @@ function createAgent(){
     }
 }
 
-// Create array to store the agent array value
+// Create array to store the agent array value, 50 agents
 let agents = [];
-
-for (let i = 0; i < 50 ; i++) {
+for (let i = 0; i < 100 ; i++) {
     agents.push(createAgent());
 }
 
@@ -95,6 +99,8 @@ function drawAgent(agentInput) {
     }
 
     ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.closePath();
 }
@@ -179,9 +185,7 @@ function touchingContaminatedWater(agentInput) {
         // check if the agent is touching waterbody or not
         // contaminted water body has radius 40
         // if the distance between centres is less than the total of waterbody's radius and agent's radius, it means it is touching or even overlap
-        if (distance <= waterbodies.radius + agentInput.radius) {
-            return true;
-        }
+        return distance <= 40 + agentInput.radius;
     }
 }
 
@@ -210,6 +214,7 @@ function animate(currentTime) {
     timeAccumulator += deltaTime;                   // to calculate how long the simulation running
     if (timeAccumulator >= logInterval){
         countSEIRStates();                          // calling the function to log the SEIR count
+        drawSEIRChart(SEIRDataOverTime);  // <-- draw chart here
         timeAccumulator = 0;
     }
 
@@ -239,53 +244,87 @@ function countSEIRStates() {
     }
     SEIRDataOverTime.push(count);
     console.log("SEIR Count at t =", count.time, count);
-    drawSEIRChart(SEIRDataOverTime); // << add this
 }
 
 // MAKE THE CHART
-function drawSEIRChart(data) {
-    const svg = d3.select("#seirChart");
-    const width = +svg.attr("width");
-    const height = +svg.attr("height");
-    svg.selectAll("*").remove(); // clear old chart
+function drawSEIRChart() {
+    if (SEIRDataOverTime.length < 2) return;
 
-    const keys = ["susceptible", "exposed", "infected", "recovered"];
+    const width = chartCanvas.width;
+    const height = chartCanvas.height;
+    const margin = 40;
 
-    const stackedData = d3.stack().keys(keys)(data);
+    chartCtx.clearRect(0, 0, width, height);
 
-    const x = d3.scaleLinear()
-        .domain(d3.extent(data, d => d.time))
-        .range([40, width - 10]);
+    // Calculate max total population
+    const totalPopulation = agents.length;
 
-    const y = d3.scaleLinear()
-        .domain([0, d3.max(data, d => keys.reduce((sum, k) => sum + d[k], 0))])
-        .range([height - 20, 10]);
+    // Get X and Y scaling
+    const maxTime = SEIRDataOverTime[SEIRDataOverTime.length - 1].time;
+    const xScale = (width - 2 * margin) / maxTime;
+    const yScale = (height - 2 * margin) / totalPopulation;
 
-    const color = d3.scaleOrdinal()
-        .domain(keys)
-        .range(["pink", "orange", "red", "purple"]);
+    // Helper to get stacked values
+    function getStackedValues(index) {
+        const point = SEIRDataOverTime[index];
+        return {
+            R: point.recovered,
+            RI: point.recovered + point.infected,
+            RIE: point.recovered + point.infected + point.exposed,
+            RIES: point.recovered + point.infected + point.exposed + point.susceptible
+        };
+    }
 
-    const area = d3.area()
-        .x(d => x(d.data.time))
-        .y0(d => y(d[0]))
-        .y1(d => y(d[1]));
+    // Draw area for each layer in order: Recovered, Infected, Exposed, Susceptible
+    function drawArea(getYTop, getYBottom, colour) {
+        chartCtx.beginPath();
+        for (let i = 0; i < SEIRDataOverTime.length; i++) {
+            const t = SEIRDataOverTime[i].time;
+            const x = margin + t * xScale;
+            const y = height - margin - getYTop(i) * yScale;
+            if (i === 0) {
+                chartCtx.moveTo(x, y);
+            } else {
+                chartCtx.lineTo(x, y);
+            }
+        }
+        for (let i = SEIRDataOverTime.length - 1; i >= 0; i--) {
+            const t = SEIRDataOverTime[i].time;
+            const x = margin + t * xScale;
+            const y = height - margin - getYBottom(i) * yScale;
+            chartCtx.lineTo(x, y);
+        }
+        chartCtx.closePath();
+        chartCtx.fillStyle = colour;
+        chartCtx.globalAlpha = 0.6;
+        chartCtx.fill();
+        chartCtx.globalAlpha = 1.0;
+    }
 
-    svg.selectAll("path")
-        .data(stackedData)
-        .join("path")
-        .attr("fill", d => color(d.key))
-        .attr("d", area);
+    // Draw in stacking order: R, I, E, S (bottom to top)
+    drawArea(i => getStackedValues(i).R, i => 0, "#800080"); // Recovered
+    drawArea(i => getStackedValues(i).RI, i => getStackedValues(i).R, "#ff0000"); // Infected
+    drawArea(i => getStackedValues(i).RIE, i => getStackedValues(i).RI, "#ffa500"); // Exposed
+    drawArea(i => getStackedValues(i).RIES, i => getStackedValues(i).RIE, "#ff69b4"); // Susceptible
 
-     // Add x-axis
-    svg.append("g")
-        .attr("transform", `translate(0,${height - 20})`)
-        .call(d3.axisBottom(x));
+    // Optional: add axes
+    chartCtx.strokeStyle = "#333";
+    chartCtx.lineWidth = 1;
 
-    // Add y-axis
-    svg.append("g")
-        .attr("transform", `translate(40,0)`)
-        .call(d3.axisLeft(y));
+    // Y-axis
+    chartCtx.beginPath();
+    chartCtx.moveTo(margin, margin);
+    chartCtx.lineTo(margin, height - margin);
+    chartCtx.stroke();
+
+    // X-axis
+    chartCtx.beginPath();
+    chartCtx.moveTo(margin, height - margin);
+    chartCtx.lineTo(width - margin, height - margin);
+    chartCtx.stroke();
 }
+
+
 
 
 
