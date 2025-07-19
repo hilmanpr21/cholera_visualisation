@@ -198,6 +198,139 @@ function changeToExposed(agentInput) {
 }
 
 
+
+
+// DRAWING STACKED CHART OVERTIME
+// Calling the chart canvas
+const chartCanvas = document.getElementById('chartCanvas');
+const chartCtx  = chartCanvas.getContext('2d');
+
+// store the simmulation starting time
+let simulationStartTime = performance.now();
+
+// create global array to store SEIR count over time
+const SEIRDataOverTime = [];
+
+// Function to cout SEIR states
+function countSEIRStates() {
+    const count = {
+        time: parseFloat(((performance.now() - simulationStartTime) / 1000).toFixed(1)), // this change milli second to second#
+        susceptible: 0,
+        exposed: 0,
+        infected: 0,
+        recovered: 0
+    };
+
+    // To count how may agent on each state
+    for (const agent of agents) {
+        count[agent.state]++;
+    }
+    SEIRDataOverTime.push(count);
+    console.log("SEIR Count at t =", count.time, count);
+
+    // update DOM stats 
+    document.getElementById('timeCount').textContent = count.time;
+    document.getElementById('susceptibleCount').textContent = count.susceptible;
+    document.getElementById('exposedCount').textContent = count.exposed;
+    document.getElementById('infectedCount').textContent = count.infected;
+    document.getElementById('recoveredCount').textContent = count.recovered;
+
+    return count;
+
+}
+
+// MAKE THE CHART
+function drawSEIRChart() {
+    if (SEIRDataOverTime.length < 1 ) return;
+
+    const width = chartCanvas.width;                // Define the Canvas width
+    const height = chartCanvas.height;              // Define canvas Height
+    const margin = 40;                              // 40 pixels
+
+    chartCtx.clearRect(0, 0, width, height);        // Clear previous drawings
+
+    const totalPopulation = agents.length;          // Define the total population variable with the length of 'agents' array
+    const maxTime = SEIRDataOverTime[SEIRDataOverTime.length - 1].time;
+    
+    const xScale = (width - 2 * margin ) / maxTime;                 //defining the x-axis scales
+    const yScale = (height -2 * margin ) / totalPopulation;         //defining the Y-axis scales
+
+    // Calculate stacked value
+    function getStackedValues(index) {
+        const point = SEIRDataOverTime[index];
+        
+        // this will return record how many agent points on each stack 
+        return {
+            R: point.recovered,                                                             // will the bottom of the stack, of the top of overlaying
+            RI: point.recovered + point.infected,                                           // will be the second layer from the front, so the stack will be behind "R" and when it stacked together with "R" it only show the value of "I"
+            RIE: point.recovered + point.infected + point.exposed,                          // will be the third layer from the front, so the stack will be behind "RI" and when it stacked together with "RI" it only show the value of "E" sit on top of "I"
+            REIS: point.recovered + point.infected + point.exposed + point.susceptible      // will be the second layer from the front, so the stack will be behind "RIE" and when it stacked together with "RIE" it only show the value of "S" sit on top of "E"
+        };
+    }
+
+    // Draw one Coloured Area
+    function drawArea(getYtop, getYbottom, colour) {
+        
+        chartCtx.beginPath();
+
+        // draw the upper line (left to right)
+        for (let i=0; i < SEIRDataOverTime.length; i++) {
+            const t = SEIRDataOverTime[i].time;
+            const x = margin + t * xScale;
+            const y = height - margin - getYtop(i) * yScale;
+            if (i === 0) {
+                chartCtx.moveTo(x,y);
+            } else {
+                chartCtx.lineTo(x,y);
+            }
+        }
+
+        // lower line (right to lext)
+        for (let i = SEIRDataOverTime.length - 1; i>=0; i--) {
+            const t = SEIRDataOverTime[i].time;
+            const x = margin + t * xScale;
+            const y = height - margin - getYbottom(i) * yScale;
+            chartCtx.lineTo(x, y);
+        }
+        chartCtx.closePath();
+        chartCtx.fillStyle = colour;
+        chartCtx.globalAlpha = 0.6;
+        chartCtx.fill();
+        chartCtx.globalAlpha = 1.0;
+    }
+
+    // Draw all SEIR layer
+    // for "recovered" state
+    drawArea(i => getStackedValues(i).R, i => 0, "#800080")
+    // for "Infected" state
+    drawArea(i => getStackedValues(i).RI, i => getStackedValues(i).R, "#ff0000")
+    // for "exposed" state
+    drawArea(i => getStackedValues(i).RIE, i => getStackedValues(i).RI, "#ffa500")
+    // for "Susceptible" state
+    drawArea(i => getStackedValues(i).REIS, i => getStackedValues(i).RIE, "#ff69b4")
+
+    // Define stroke line
+    chartCtx.strokeStyle = "#333";              // Set the stroke (line) colour to dark grey (#333)
+    chartCtx.lineWidth = 1;                     // Set the line thickness to 1 pixel
+
+    // draw Y-axis
+    chartCtx.beginPath();                       // Start a new drawing path
+    chartCtx.moveTo(margin, margin);            // Move the pen to the top-left corner of the plot area (left margin, top margin)
+    chartCtx.lineTo(margin, height - margin);   // Draw a vertical line down to the bottom-left corner of the plot area
+    chartCtx.stroke();                          // Render the vertical line on the canvas
+
+    // draw x-axis
+    chartCtx.beginPath();                       // Start a new drawing path
+    chartCtx.moveTo(margin, height - margin);   // Move the pen to the bottom-left corner of the plot area
+    chartCtx.lineTo(width - margin, height - margin); // Draw a horizontal line to the bottom-right corner of the plot area
+    chartCtx.stroke();                          // Render the horizontal line on the canvas
+
+}
+
+// How often in second the log SEIR counts
+const logInterval = 0.5; //in second
+let timeAccumulator = 0; // set initial time
+
 // Render the canvas in loop
 function animate(currentTime) {
     const deltaTime = getDeltaTime(currentTime)     // to calculate the deltaTime
@@ -208,13 +341,16 @@ function animate(currentTime) {
         updateAgentState(agent, deltaTime);             // to chaneg the SEIR state
     })
     
-    drawScene();                                    // To draw the frame
+    drawScene();   
+    
+    countSEIRStates();                          // calling the function to log the SEIR count
+    drawSEIRChart();
 
     // call to count SEIR data over time
     timeAccumulator += deltaTime;                   // to calculate how long the simulation running
     if (timeAccumulator >= logInterval){
         countSEIRStates();                          // calling the function to log the SEIR count
-        drawSEIRChart(SEIRDataOverTime);  // <-- draw chart here
+        drawSEIRChart();  // <-- draw chart here
         timeAccumulator = 0;
     }
 
@@ -222,114 +358,13 @@ function animate(currentTime) {
     
 }
 
-// TRACK SEIR STATE COUNTS OVER TIME
-// create global array to store SEIr count over time
-const SEIRDataOverTime = [];
 
-// How often in second the log SEIR counts
-const logInterval = 0.5; //in second
-let timeAccumulator = 0; // set initial time
-
-// Function to cout SEIR states
-function countSEIRStates() {
-    const count = {
-        time: parseFloat((performance.now() / 1000).toFixed(1)), // this change milli second to second#
-        susceptible: 0,
-        exposed: 0,
-        infected: 0,
-        recovered: 0
-    };
-    for (const agent of agents) {
-        count[agent.state]++;
-    }
-    SEIRDataOverTime.push(count);
-    console.log("SEIR Count at t =", count.time, count);
-}
-
-// MAKE THE CHART
-function drawSEIRChart() {
-    if (SEIRDataOverTime.length < 2) return;
-
-    const width = chartCanvas.width;
-    const height = chartCanvas.height;
-    const margin = 40;
-
-    chartCtx.clearRect(0, 0, width, height);
-
-    // Calculate max total population
-    const totalPopulation = agents.length;
-
-    // Get X and Y scaling
-    const maxTime = SEIRDataOverTime[SEIRDataOverTime.length - 1].time;
-    const xScale = (width - 2 * margin) / maxTime;
-    const yScale = (height - 2 * margin) / totalPopulation;
-
-    // Helper to get stacked values
-    function getStackedValues(index) {
-        const point = SEIRDataOverTime[index];
-        return {
-            R: point.recovered,
-            RI: point.recovered + point.infected,
-            RIE: point.recovered + point.infected + point.exposed,
-            RIES: point.recovered + point.infected + point.exposed + point.susceptible
-        };
-    }
-
-    // Draw area for each layer in order: Recovered, Infected, Exposed, Susceptible
-    function drawArea(getYTop, getYBottom, colour) {
-        chartCtx.beginPath();
-        for (let i = 0; i < SEIRDataOverTime.length; i++) {
-            const t = SEIRDataOverTime[i].time;
-            const x = margin + t * xScale;
-            const y = height - margin - getYTop(i) * yScale;
-            if (i === 0) {
-                chartCtx.moveTo(x, y);
-            } else {
-                chartCtx.lineTo(x, y);
-            }
-        }
-        for (let i = SEIRDataOverTime.length - 1; i >= 0; i--) {
-            const t = SEIRDataOverTime[i].time;
-            const x = margin + t * xScale;
-            const y = height - margin - getYBottom(i) * yScale;
-            chartCtx.lineTo(x, y);
-        }
-        chartCtx.closePath();
-        chartCtx.fillStyle = colour;
-        chartCtx.globalAlpha = 0.6;
-        chartCtx.fill();
-        chartCtx.globalAlpha = 1.0;
-    }
-
-    // Draw in stacking order: R, I, E, S (bottom to top)
-    drawArea(i => getStackedValues(i).R, i => 0, "#800080"); // Recovered
-    drawArea(i => getStackedValues(i).RI, i => getStackedValues(i).R, "#ff0000"); // Infected
-    drawArea(i => getStackedValues(i).RIE, i => getStackedValues(i).RI, "#ffa500"); // Exposed
-    drawArea(i => getStackedValues(i).RIES, i => getStackedValues(i).RIE, "#ff69b4"); // Susceptible
-
-    // Optional: add axes
-    chartCtx.strokeStyle = "#333";
-    chartCtx.lineWidth = 1;
-
-    // Y-axis
-    chartCtx.beginPath();
-    chartCtx.moveTo(margin, margin);
-    chartCtx.lineTo(margin, height - margin);
-    chartCtx.stroke();
-
-    // X-axis
-    chartCtx.beginPath();
-    chartCtx.moveTo(margin, height - margin);
-    chartCtx.lineTo(width - margin, height - margin);
-    chartCtx.stroke();
-}
-
-
-
-
+countSEIRStates();
 
 // start animation by calling
 animate() 
 
+
+
 // to update chart every few second
-setInterval(() => drawSEIRChart(SEIRDataOverTime), 1000);
+// setInterval(() => drawSEIRChart(SEIRDataOverTime), 1000);
