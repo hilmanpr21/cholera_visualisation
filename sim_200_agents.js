@@ -71,7 +71,7 @@ function drawScene() {
         ctx.closePath();
     }
     
-    //Draw the 200 agent
+    //Draw the 100 agent
     agents.forEach(drawAgent);
 }
 
