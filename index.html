@@ -3,33 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <title> Cholera Simulation</title>
-    <style>
-        canvas {
-            border: 1px solid salmon;
-            background-color: #fefefe;
-            display: block;
-            margin: auto;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/scrollama"></script>
 </head>
 
 <body>
-    <canvas id="simCanvas" width="800" height="600"></canvas>
 
-    <div>
-        time: <span id="timeCount">0</span> <br>
-        Susceptible: <span id="susceptibleCount">0</span><br>
-        Exposed: <span id="exposedCount">0</span><br>
-        Infected: <span id="infectedCount">0</span><br>
-        Recovered: <span id="recoveredCount">0</span>
+    <div id="scrolly">
+        <div class="step" data-sim="sim_200_agents">Simulation 1: 200 Agents<</div>
+        <div class="step" data-sim="sim_od_agent">Simulation 2: OD Agent</div>
+        <div class="step" data-sim="sim_od_200_agents">imulation 3: OD + 200 Agents</div>
     </div>
 
-    <canvas id="chartCanvas" width="800" height="300"></canvas>
+    <div class="graphic">
+        <div class="canvas-container">
+            <div id="logState" class="StatContainer">
+                <div id="logTime" class="stat-item">
+                    <h3>Time (days): </h3> <span id="timeCount">0</span>
+                </div>
+                <div id="logSusceptible" class="stat-item">
+                    <h3>Susceptible: </h3><span id="susceptibleCount">0</span>
+                </div>
+                <div id="logExposed" class="stat-item">
+                    <h3>Exposed: </h3><span id="exposedCount">0</span>
+                </div>
+                <div id="logInfected" class="stat-item">
+                    <h3>Infected: </h3><span id="infectedCount">0</span>
+                </div>
+                <div id="logRecovered" class="stat-item">
+                    <h3>Recovered: </h3><span id="recoveredCount">0</span>
+                </div>
+            </div>
+            <canvas id="simCanvas" width="800" height="600"></canvas>
+        </div>
+        
+        <div class="chart-container">
+            <canvas id="chartCanvas" width="800" height="300"></canvas>
+        </div>
+    </div>
 
+    
+    
     <!-- Link to the simulation javaScript-->
-    <script src="sim_od_agent.js"></script>
-
+    <script src="sim_200_agents.js"></script>
+    <script src="scroll.js"></script>
 </body>
 </html>
 

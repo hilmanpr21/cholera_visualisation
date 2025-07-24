@@ -1,0 +1,104 @@
+:root {
+    --susceptible-color:#0072B2;
+    --exposed-color:#E69F00;
+    --infected-color:#D55E00;
+    --recovered-color:#009E73;
+    --sim-canvas-width: 800px;
+    --sim-canvas-height: 600px;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 20;
+    background-color: #eeebe3;
+    justify-content: center;
+    it
+}
+
+h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    margin: 0;
+}
+
+span {
+    font-size: x-large;
+    font-weight: bolder;
+    text-align: center;
+}
+
+.graphic {
+    max-width: 1920px;
+    min-width: 1080px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+}
+
+.canvas-container{
+    display: flex;
+    flex-direction: row; /* lays logState and simCanvas side-by-side */
+    gap: 10px;
+    align-items: flex-start;
+    height: max-content;
+}
+
+#simCanvas{
+    width: var(--sim-canvas-width);
+    height: var(--sim-canvas-height);
+}
+
+canvas {
+    /*border: 1px solid #fefefe;*/
+    background-color: #fefefe;
+}
+
+/* style the div to stack text vertically */
+#logState {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: var(--sim-canvas-height);
+
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+#logSusceptible {
+    color: var(--susceptible-color);
+}
+
+#logExposed {
+    color: var(--exposed-color);
+}
+
+#logInfected {
+    color: var(--infected-color);
+}
+
+#logRecovered {
+    color: var(--recovered-color);
+}
+
+.scrolly {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.step {
+  margin: 300px 0;
+  padding: 50px;
+  background: #f4f4f4;
+  border-left: 4px solid #555;
+  font-size: 1.5rem;
+}

@@ -1,6 +1,13 @@
 const canvas = document.getElementById('simCanvas')
 const ctx = canvas.getContext('2d');
 
+// Get the variable color from CSS file
+const style = getComputedStyle(document.documentElement);
+const susceptibleColor = style.getPropertyValue('--susceptible-color');
+const exposedColor = style.getPropertyValue('--exposed-color');
+const infectedColor = style.getPropertyValue('--infected-color');
+const recoveredColor = style.getPropertyValue('--recovered-color');
+
 // define waterbodies at the start
 const contaminatedWaterbodies = [
     { 
@@ -55,7 +62,7 @@ for (let i = 0; i < 100 ; i++) {
 }
 
 
-
+// function to draw the scene
 function drawScene() {
     
     // Clear the entire canvas to start fresh
@@ -82,19 +89,19 @@ function drawAgent(agentInput) {
     
     switch (agentInput.state) {
         case "susceptible":
-            ctx.fillStyle = "pink";
+            ctx.fillStyle = susceptibleColor;
             break;
         
         case "exposed":
-            ctx.fillStyle = "orange";
+            ctx.fillStyle = exposedColor;
             break;
 
         case "infected" :
-            ctx.fillStyle = "red";
+            ctx.fillStyle = infectedColor;
             break;
 
         case "recovered" :
-            ctx.fillStyle = "purple";
+            ctx.fillStyle = recoveredColor;
             break;
     }
 
@@ -245,7 +252,7 @@ function drawSEIRChart() {
 
     const width = chartCanvas.width;                // Define the Canvas width
     const height = chartCanvas.height;              // Define canvas Height
-    const margin = 40;                              // 40 pixels
+    const margin = 0;                              // 40 pixels
 
     chartCtx.clearRect(0, 0, width, height);        // Clear previous drawings
 
@@ -294,20 +301,20 @@ function drawSEIRChart() {
         }
         chartCtx.closePath();
         chartCtx.fillStyle = colour;
-        chartCtx.globalAlpha = 0.6;
+        //chartCtx.globalAlpha = 0.6;
         chartCtx.fill();
-        chartCtx.globalAlpha = 1.0;
+        //chartCtx.globalAlpha = 1.0;
     }
 
     // Draw all SEIR layer
     // for "recovered" state
-    drawArea(i => getStackedValues(i).R, i => 0, "#800080")
+    drawArea(i => getStackedValues(i).R, i => 0, recoveredColor)
     // for "Infected" state
-    drawArea(i => getStackedValues(i).RI, i => getStackedValues(i).R, "#ff0000")
+    drawArea(i => getStackedValues(i).RI, i => getStackedValues(i).R, infectedColor)
     // for "exposed" state
-    drawArea(i => getStackedValues(i).RIE, i => getStackedValues(i).RI, "#ffa500")
+    drawArea(i => getStackedValues(i).RIE, i => getStackedValues(i).RI, exposedColor)
     // for "Susceptible" state
-    drawArea(i => getStackedValues(i).REIS, i => getStackedValues(i).RIE, "#ff69b4")
+    drawArea(i => getStackedValues(i).REIS, i => getStackedValues(i).RIE, susceptibleColor)
 
     // Define stroke line
     chartCtx.strokeStyle = "#333";              // Set the stroke (line) colour to dark grey (#333)
