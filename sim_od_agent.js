@@ -1,6 +1,13 @@
 const canvas = document.getElementById('simCanvas');
 const ctx = canvas.getContext('2d');
 
+// Get the variable color from CSS file
+const style = getComputedStyle(document.documentElement);
+const susceptibleColor = style.getPropertyValue('--susceptible-color');
+const exposedColor = style.getPropertyValue('--exposed-color');
+const infectedColor = style.getPropertyValue('--infected-color');
+const recoveredColor = style.getPropertyValue('--recovered-color');
+
 // Declare one agent object
 const agent = {
     x: 0,                         // initial agent x-coordinate, will be set to the house.x later
@@ -14,7 +21,7 @@ const agent = {
         y: Math.random() * canvas.clientHeight      // randomise the y-coordinate for work
     },         // Set the pixel location of work
     target: 'work',                 // Set the initial target
-    speed: 1.5                      // movement speed in pixels/frame
+    speed: 3.5                      // movement speed in pixels/frame
 }
 
 
@@ -43,27 +50,68 @@ function drawScene() {
 
     // draw house
     ctx.fillStyle = 'green';
-    ctx.fillRect(agent.house.x-5, agent.house.y, 10, 10);           // agent.house.x is the center pixel of the house, `-5` is because the house size is 10 pixels so the starting point to draw the rectangle should be reduce by half of the pixels size
+    ctx.fillRect(agent.house.x-5, agent.house.y, 20, 20);           // agent.house.x is the center pixel of the house, `-5` is because the house size is 10 pixels so the starting point to draw the rectangle should be reduce by half of the pixels size
 
     // draw work
     ctx.fillStyle = 'red';
-    ctx.fillRect(agent.work.x - 5, agent.work.y - 5, 10, 10);
+    ctx.fillRect(agent.work.x - 5, agent.work.y , 20, 20);
 
     // draw Agent 
     ctx.beginPath();
-    ctx.arc(agent.x, agent.y, 5, 0, 2 * Math.PI);
-    ctx.fillStyle = 'blue';
+    ctx.arc(agent.x, agent.y, 10, 0, 2 * Math.PI);
+    ctx.fillStyle = susceptibleColor;
     ctx.fill();
     ctx.closePath();
 }
+
+// create object to store animation Id
+let animationId = null;
 
 // Declare animation function
 function animate() {
     updateAgentMovement()
     drawScene()
 
-    requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
 }
 
-// call the animation function to start the sumilation
-animate()
+// Create reset function
+function reset() {
+    agent.x = agent.house.x;
+    agent.y = agent.house.y;
+    agent.target = "work";
+}
+
+function start() {
+    console.log("Starting Simulation");
+
+    // Cancel Animation loop if running or the animationId is not not null
+    if (animationId != null){
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+
+    // calling the reset function
+    reset();
+    animationId = requestAnimationFrame(animate)
+}
+
+// Declare stop function
+function stop() {
+
+    // Cancel Animation loop if running or the animationId is not not null
+    if (animationId != null) {
+        cancelAnimationFrame(animationId);
+        animationId=null;
+        console.log("Stopping simulation");
+    }
+
+    // Clear simulation canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Clear chart canvas
+    const chartCtx = chartCanvas.getContext('2d');
+    chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+}
+
+window.sim_od_agent = { start, stop};

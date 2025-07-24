@@ -9,13 +9,8 @@
 </head>
 
 <body>
-
-    <div id="scrolly">
-        <div class="step" data-sim="sim_200_agents">Simulation 1: 200 Agents<</div>
-        <div class="step" data-sim="sim_od_agent">Simulation 2: OD Agent</div>
-        <div class="step" data-sim="sim_od_200_agents">imulation 3: OD + 200 Agents</div>
-    </div>
-
+    <section id="scroll">
+        <!--Setup graphic container-->
     <div class="graphic">
         <div class="canvas-container">
             <div id="logState" class="StatContainer">
@@ -36,6 +31,12 @@
                 </div>
             </div>
             <canvas id="simCanvas" width="800" height="600"></canvas>
+            <!-- Temporary debug buttons -->
+            <div class="debug-controls">
+                <button onclick="window.sim_od_agent.start()">Start</button>
+                <button onclick="window.sim_od_agent.stop()">Stop</button>
+                <button onclick="window.sim_od_agent.reset()">Reset</button>
+            </div>
         </div>
         
         <div class="chart-container">
@@ -43,10 +44,18 @@
         </div>
     </div>
 
+    <!--Setup scroll container-->
+    <div id="scrolly">
+        <div class="step" data-step="sim_200_agents">Simulation 1: 200 Agents<</div>
+        <div class="step" data-step="sim_od_agent">Simulation 2: OD Agent</div>
+        <div class="step" data-step="sim_od_200_agents">imulation 3: OD + 200 Agents</div>
+    </div>
+    </section>
+    
     
     
     <!-- Link to the simulation javaScript-->
-    <script src="sim_200_agents.js"></script>
+    <script src="sim_od_agent.js"></script>
     <script src="scroll.js"></script>
 </body>
 </html>

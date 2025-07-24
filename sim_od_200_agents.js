@@ -1,6 +1,13 @@
 const canvas = document.getElementById('simCanvas');
 const ctx = canvas.getContext('2d');
 
+// Get the variable color from CSS file
+const style = getComputedStyle(document.documentElement);
+const susceptibleColor = style.getPropertyValue('--susceptible-color');
+const exposedColor = style.getPropertyValue('--exposed-color');
+const infectedColor = style.getPropertyValue('--infected-color');
+const recoveredColor = style.getPropertyValue('--recovered-color');
+
 
 function createAgent() {
     const radius = 10;
@@ -26,7 +33,7 @@ function createAgent() {
     }
 }
 
-// create array pf agents
+// create array of agents
 let agents = [];    // declare empty array
 for (let i = 0; i < 100; i++) {
     agents.push(createAgent())
@@ -53,7 +60,7 @@ function drawAgent(agentInput) {
     // draw Agent 
     ctx.beginPath();
     ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
-    ctx.fillStyle = 'blue';
+    ctx.fillStyle = susceptibleColor;
     ctx.fill();
     ctx.closePath();
 }
@@ -76,6 +83,10 @@ function drawScene() {
     agents.forEach(drawAgent)
 }
 
+
+// Create object to stroe animation frame ID
+let animationId = null; 
+
 // Declare animation function
 function animate() {
     agents.forEach(agent => {
@@ -83,8 +94,59 @@ function animate() {
     })
     drawScene()
 
-    requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
 }
 
-// call the animation function to start the sumilation
-animate()
+//declare reset function
+function reset() {
+
+    console.log("resetting simulation");
+
+    // recreate array of agents
+    agents = [];    // declare empty array
+    for (let i = 0; i < 100; i++) {
+        agents.push(createAgent())
+    }
+}
+
+// Declare start function
+function start() {
+    console.log("Starting Simulation");
+
+    // Stop any existing animation first! y canceling the animation request
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+    
+    // calling the reset function
+    reset();
+
+    // 
+    animationId = requestAnimationFrame(animate);
+}
+
+// Declare stop function
+function stop() {
+
+    // Cancel Animation loop if running or the animationId is not not null
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId=null;
+        console.log("Stopping simulation");
+    }
+
+    // Clear simulation canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Clear chart canvas
+    const chartCtx = chartCanvas.getContext('2d');
+    chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+}
+
+
+window.sim_od_200_agents = { 
+    start, 
+    stop,
+    reset // Optional but useful for debugging
+};

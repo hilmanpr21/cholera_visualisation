@@ -205,8 +205,6 @@ function changeToExposed(agentInput) {
 }
 
 
-
-
 // DRAWING STACKED CHART OVERTIME
 // Calling the chart canvas
 const chartCanvas = document.getElementById('chartCanvas');
@@ -221,7 +219,7 @@ const SEIRDataOverTime = [];
 // Function to cout SEIR states
 function countSEIRStates() {
     const count = {
-        time: parseFloat(((performance.now() - simulationStartTime) / 1000).toFixed(1)), // this change milli second to second#
+        time: parseFloat(((performance.now() - simulationStartTime) / 1000).toFixed(2)), // this change milli second to second#
         susceptible: 0,
         exposed: 0,
         infected: 0,
@@ -233,10 +231,10 @@ function countSEIRStates() {
         count[agent.state]++;
     }
     SEIRDataOverTime.push(count);
-    console.log("SEIR Count at t =", count.time, count);
+    // console.log("SEIR Count at t =", count.time, count);
 
     // update DOM stats 
-    document.getElementById('timeCount').textContent = count.time;
+    document.getElementById('timeCount').textContent = count.time.toFixed(0);
     document.getElementById('susceptibleCount').textContent = count.susceptible;
     document.getElementById('exposedCount').textContent = count.exposed;
     document.getElementById('infectedCount').textContent = count.infected;
@@ -338,6 +336,10 @@ function drawSEIRChart() {
 const logInterval = 0.5; //in second
 let timeAccumulator = 0; // set initial time
 
+
+// Store the ID of the current animation frame
+let animationId = null; 
+
 // Render the canvas in loop
 function animate(currentTime) {
     const deltaTime = getDeltaTime(currentTime)     // to calculate the deltaTime
@@ -361,17 +363,68 @@ function animate(currentTime) {
         timeAccumulator = 0;
     }
 
-    requestAnimationFrame(animate);                 // To schedule next frame (re-run animation)
     
+    animationId = requestAnimationFrame(animate);                 // To schedule next frame (re-run animation) before processing and capture the ID  
+}
+
+//declare reset function
+function reset() {
+    console.log("resetting simulation");
+
+    // recreate agents array 
+    agents = [];
+    for (let i = 0; i < 100; i++){
+        agents.push(createAgent())
+    }
+
+    // Reset timing variables -- basically decalring everyting to null or zero again 
+    simulationStartTime = performance.now();
+    SEIRDataOverTime.length = 0;
+    timeAccumulator = 0;
+    lastTime = performance.now();
+
+    // Reset UI counters
+    document.getElementById('timeCount').textContent = '0';
+    document.getElementById('susceptibleCount').textContent = '0';
+    document.getElementById('exposedCount').textContent = '0';
+    document.getElementById('infectedCount').textContent = '0';
+    document.getElementById('recoveredCount').textContent = '0';       
+}
+
+// Declare start function
+function start() {
+    console.log("Starting Simulation");
+
+    // Stop any existing animation first! y canceling the animation request
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+    
+    // calling the reset function
+    reset();
+
+    // 
+    animationId = requestAnimationFrame(animate);
+}
+
+// Declare stop function
+function stop() {
+    
+
+    // Cancel Animation loop if running or the animationId is not not null
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId=null;
+        console.log("Stopping simulation");
+    }
+
+
 }
 
 
-countSEIRStates();
-
-// start animation by calling
-animate() 
-
-
-
-// to update chart every few second
-// setInterval(() => drawSEIRChart(SEIRDataOverTime), 1000);
+window.sim_200_agents = { 
+    start, 
+    stop,
+    reset // Optional but useful for debugging
+};
