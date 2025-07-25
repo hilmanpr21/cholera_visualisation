@@ -9,55 +9,89 @@
 </head>
 
 <body>
-    <section id="scroll">
-        <!--Setup graphic container-->
-    <div class="graphic">
-        <div class="canvas-container">
-            <div id="logState" class="StatContainer">
-                <div id="logTime" class="stat-item">
-                    <h3>Time (days): </h3> <span id="timeCount">0</span>
-                </div>
-                <div id="logSusceptible" class="stat-item">
-                    <h3>Susceptible: </h3><span id="susceptibleCount">0</span>
-                </div>
-                <div id="logExposed" class="stat-item">
-                    <h3>Exposed: </h3><span id="exposedCount">0</span>
-                </div>
-                <div id="logInfected" class="stat-item">
-                    <h3>Infected: </h3><span id="infectedCount">0</span>
-                </div>
-                <div id="logRecovered" class="stat-item">
-                    <h3>Recovered: </h3><span id="recoveredCount">0</span>
-                </div>
-            </div>
-            <canvas id="simCanvas" width="800" height="600"></canvas>
-            <!-- Temporary debug buttons -->
-            
-            <div class="debug-controls">
-                <button onclick="window.sim_200_agents.start()">Start</button>
-                <button onclick="window.sim_200_agents.stop()">Stop</button>
-                <button onclick="window.sim_200_agents.reset()">Reset</button>
-            </div>
 
-        </div>
+    <main>
+        <!--
+        <section id="intro">
+            <h1>Cholera Simulation</h1>
+            <p>This simulation visualizes the spread of cholera in a population of agents.</p>
+        </section>
+        -->
         
-        <div class="chart-container">
-            <canvas id="chartCanvas" width="800" height="300"></canvas>
-        </div>
-    </div>
+        <section id="scrolly">
+            <!--Setup graphic container-->
+            <div class="sticky-graphic">
+                <div class="canvas-container">
+                    <div id="logState" class="StatContainer">
+                        <div id="logTime" class="stat-item">
+                            <h3>Time (days): </h3> <span id="timeCount">0</span>
+                        </div>
+                        <div id="logSusceptible" class="stat-item">
+                            <h3>Susceptible: </h3><span id="susceptibleCount">0</span>
+                        </div>
+                        <div id="logExposed" class="stat-item">
+                            <h3>Exposed: </h3><span id="exposedCount">0</span>
+                        </div>
+                        <div id="logInfected" class="stat-item">
+                            <h3>Infected: </h3><span id="infectedCount">0</span>
+                        </div>
+                        <div id="logRecovered" class="stat-item">
+                            <h3>Recovered: </h3><span id="recoveredCount">0</span>
+                        </div>
+                    </div>
+                    <canvas id="simCanvas" width="800" height="600"></canvas>
+                    <!-- Temporary debug buttons -->
+                    <!--
+                    <div class="debug-controls">
+                        <button onclick="window.sim_200_agents.start()">Start</button>
+                        <button onclick="window.sim_200_agents.stop()">Stop</button>
+                        <button onclick="window.sim_200_agents.reset()">Reset</button>
+                    </div>
+                    -->
 
-    <!--Setup scroll container-->
-    <div id="scrolly">
-        <div class="step" data-step="sim_200_agents">Simulation 1: 200 Agents</div>
-        <div class="step" data-step="sim_od_agent">Simulation 2: OD Agent</div>
-        <div class="step" data-step="sim_od_200_agents">imulation 3: OD + 200 Agents</div>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="chartCanvas" width="800" height="300"></canvas>
+                </div>
+            </div>
+
+            <!-- Scrollable steps container -->
+            <div class="step-container">
+                <div class="step" data-step="sim_od_agent">
+                    <h2>Simulation: Single Movement</h2>
+                    <p>This simulation shows a single agent moving between home (green) and work (red) locations, demonstrating how regular movement patterns can affect disease spread.</p>
+                </div>
+                <div class="step" data-step="sim_200_agents">
+                    <h2>Simulation 1: Random Movement</h2>
+                    <p>This simulation shows 200 agents moving randomly through the environment, with disease transmission occurring when susceptible agents contact contaminated water.</p>
+                </div>
+                
+                <div class="step" data-step="sim_od_200_agents">
+                    <h2>Simulation 3: Multiple OD Agents</h2>
+                    <p>This simulation combines the previous two approaches with 200 agents moving between home and work locations, creating a more realistic model of human movement patterns.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="outro">
+            <h2>About this Simulation</h2>
+            <p>This interactive visualization demonstrates how cholera spreads through water contamination using agent-based modeling.</p>
+        </section>    
+    </main>
+
+    <!-- Debug controls - can be hidden in final version -->
+    <div class="debug-controls">
+        <button onclick="window.sim_200_agents.start()">Start</button>
+        <button onclick="window.sim_200_agents.stop()">Stop</button>
+        <button onclick="window.sim_200_agents.reset()">Reset</button>
     </div>
-    </section>
-    
-    
     
     <!-- Link to the simulation javaScript-->
     <script src="sim_200_agents.js"></script>
+    <script src="sim_od_agent.js"></script>
+    <script src="sim_od_200_agents.js"></script>
+    <script src="scroll.js"></script>
 
 </body>
 </html>
