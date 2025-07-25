@@ -32,11 +32,13 @@
             </div>
             <canvas id="simCanvas" width="800" height="600"></canvas>
             <!-- Temporary debug buttons -->
+            
             <div class="debug-controls">
-                <button onclick="window.sim_od_agent.start()">Start</button>
-                <button onclick="window.sim_od_agent.stop()">Stop</button>
-                <button onclick="window.sim_od_agent.reset()">Reset</button>
+                <button onclick="window.sim_200_agents.start()">Start</button>
+                <button onclick="window.sim_200_agents.stop()">Stop</button>
+                <button onclick="window.sim_200_agents.reset()">Reset</button>
             </div>
+
         </div>
         
         <div class="chart-container">
@@ -46,7 +48,7 @@
 
     <!--Setup scroll container-->
     <div id="scrolly">
-        <div class="step" data-step="sim_200_agents">Simulation 1: 200 Agents<</div>
+        <div class="step" data-step="sim_200_agents">Simulation 1: 200 Agents</div>
         <div class="step" data-step="sim_od_agent">Simulation 2: OD Agent</div>
         <div class="step" data-step="sim_od_200_agents">imulation 3: OD + 200 Agents</div>
     </div>
@@ -55,8 +57,8 @@
     
     
     <!-- Link to the simulation javaScript-->
-    <script src="sim_od_agent.js"></script>
-    <script src="scroll.js"></script>
+    <script src="sim_200_agents.js"></script>
+
 </body>
 </html>
 

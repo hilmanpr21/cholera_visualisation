@@ -404,13 +404,12 @@ function start() {
     // calling the reset function
     reset();
 
-    // 
+    // start the animation
     animationId = requestAnimationFrame(animate);
 }
 
 // Declare stop function
-function stop() {
-    
+function stop() {   
 
     // Cancel Animation loop if running or the animationId is not not null
     if (animationId) {
@@ -418,6 +417,13 @@ function stop() {
         animationId=null;
         console.log("Stopping simulation");
     }
+
+    // Clear the entire canvas to start fresh
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+
+    // Clear the entire canvas to start fresh
+    chartCtx.clearRect(0, 0, canvas.width, canvas.height);
 
 
 }

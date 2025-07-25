@@ -88,17 +88,41 @@ canvas {
     color: var(--recovered-color);
 }
 
-.scrolly {
-  position: relative;
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
+#scroll {
+    display: block;
+    position: relative;
+}
+
+/* Sticky visualization container */
+.sticky-container {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 0;
+}
+
+/* Step container styling */
+#scrolly {
+    position: relative;
+    padding: 2rem;
+    margin-top: 60vh;
+    z-index: 10;
 }
 
 .step {
-  margin: 300px 0;
-  padding: 50px;
-  background: #f4f4f4;
-  border-left: 4px solid #555;
-  font-size: 1.5rem;
+    margin: 60vh 0;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    transition: opacity 0.5s ease;
+    
+}
+
+.step.is-active {
+    opacity: 1 !important;
+    transform: scale(1.03);
 }
