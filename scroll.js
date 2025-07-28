@@ -8,8 +8,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Collection of all simulations
     const simulations = {
         sim_200_agents: window.sim_200_agents,
-        sim_od_agent: window.sim_od_agent,
-        sim_od_200_agents: window.sim_od_200_agents
+        sim_seir_1_agent: window.sim_seir_1_agent,
+        sim_od_200_agents: window.sim_od_200_agents,
+        sim_waterbody_to_contaminated_waterbody: window.sim_waterbody_to_contaminated_waterbody
     };
     
     // Function to handle step enter (when a new step becomes active)

@@ -58,7 +58,7 @@
 
             <!-- Scrollable steps container -->
             <div class="step-container">
-                <div class="step" data-step="sim_od_agent">
+                <div class="step" data-step="sim_seir_1_agent">
                     <h2>Simulation: Single Movement</h2>
                     <p>This simulation shows a single agent moving between home (green) and work (red) locations, demonstrating how regular movement patterns can affect disease spread.</p>
                 </div>
@@ -67,7 +67,7 @@
                     <p>This simulation shows 200 agents moving randomly through the environment, with disease transmission occurring when susceptible agents contact contaminated water.</p>
                 </div>
                 
-                <div class="step" data-step="sim_od_200_agents">
+                <div class="step" data-step="sim_waterbody_to_contaminated_waterbody">
                     <h2>Simulation 3: Multiple OD Agents</h2>
                     <p>This simulation combines the previous two approaches with 200 agents moving between home and work locations, creating a more realistic model of human movement patterns.</p>
                 </div>
@@ -89,8 +89,9 @@
     
     <!-- Link to the simulation javaScript-->
     <script src="sim_200_agents.js"></script>
-    <script src="sim_od_agent.js"></script>
+    <script src="sim_seir_1_agent.js"></script>
     <script src="sim_od_200_agents.js"></script>
+    <script src="sim_waterbody_to_contaminated_waterbody.js"></script>
     <script src="scroll.js"></script>
 
 </body>

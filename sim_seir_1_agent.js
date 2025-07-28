@@ -38,8 +38,6 @@
         agents.push(createAgent());
     }
 
-    // fuction to draw 
-
     // function to draw the scene
     function drawScene() {
         
@@ -59,7 +57,7 @@
             ctx.closePath();
         }
 
-        //Draw the 100 agent
+        //Draw the agent
         agents.forEach(drawAgent);
     }
 
@@ -160,6 +158,8 @@
     // Get the deltaTime to calculate how long the agent have been on that state
     let lastTime = performance.now();       // Define the lastTime object with timestamp from `performance.now()` for the initial value
 
+    // Function to calculate deltaTime
+    // This function calculates the time difference between the current frame and the last frame
     function getDeltaTime(currentTimeInput) {
         let deltaTime = (currentTimeInput - lastTime) / 1000;       // divided to 1000 to change the unit of deltaTime from milisecond to second
         lastTime = currentTimeInput;                                // Assign new lastTime with currentTime for the next frame calculation
@@ -279,122 +279,6 @@
     // create global array to store SEIR count over time
     const SEIRDataOverTime = [];
 
-    // Function to cout SEIR states
-    function countSEIRStates() {
-        const count = {
-            time: parseFloat(((performance.now() - simulationStartTime) / 1000).toFixed(2)), // this change milli second to second#
-            susceptible: 0,
-            exposed: 0,
-            infected: 0,
-            recovered: 0
-        };
-
-        // To count how may agent on each state
-        for (const agent of agents) {
-            count[agent.state]++;
-        }
-        SEIRDataOverTime.push(count);
-        // console.log("SEIR Count at t =", count.time, count);
-
-        // update DOM stats 
-        // document.getElementById('timeCount').textContent = count.time.toFixed(0);
-        // document.getElementById('susceptibleCount').textContent = count.susceptible;
-        // document.getElementById('exposedCount').textContent = count.exposed;
-        // document.getElementById('infectedCount').textContent = count.infected;
-        // document.getElementById('recoveredCount').textContent = count.recovered;
-
-        return count;
-
-    }
-
-    // MAKE THE CHART
-    function drawSEIRChart() {
-        if (SEIRDataOverTime.length < 1 ) return;
-
-        const width = chartCanvas.width;                // Define the Canvas width
-        const height = chartCanvas.height;              // Define canvas Height
-        const margin = 0;                              // 40 pixels
-
-        chartCtx.clearRect(0, 0, width, height);        // Clear previous drawings
-
-        const totalPopulation = agents.length;          // Define the total population variable with the length of 'agents' array
-        const maxTime = SEIRDataOverTime[SEIRDataOverTime.length - 1].time;
-        
-        const xScale = (width - 2 * margin ) / maxTime;                 //defining the x-axis scales
-        const yScale = (height -2 * margin ) / totalPopulation;         //defining the Y-axis scales
-
-        // Calculate stacked value
-        function getStackedValues(index) {
-            const point = SEIRDataOverTime[index];
-            
-            // this will return record how many agent points on each stack 
-            return {
-                R: point.recovered,                                                             // will the bottom of the stack, of the top of overlaying
-                RI: point.recovered + point.infected,                                           // will be the second layer from the front, so the stack will be behind "R" and when it stacked together with "R" it only show the value of "I"
-                RIE: point.recovered + point.infected + point.exposed,                          // will be the third layer from the front, so the stack will be behind "RI" and when it stacked together with "RI" it only show the value of "E" sit on top of "I"
-                REIS: point.recovered + point.infected + point.exposed + point.susceptible      // will be the second layer from the front, so the stack will be behind "RIE" and when it stacked together with "RIE" it only show the value of "S" sit on top of "E"
-            };
-        }
-
-        // Draw one Coloured Area
-        function drawArea(getYtop, getYbottom, colour) {
-            
-            chartCtx.beginPath();
-
-            // draw the upper line (left to right)
-            for (let i=0; i < SEIRDataOverTime.length; i++) {
-                const t = SEIRDataOverTime[i].time;
-                const x = margin + t * xScale;
-                const y = height - margin - getYtop(i) * yScale;
-                if (i === 0) {
-                    chartCtx.moveTo(x,y);
-                } else {
-                    chartCtx.lineTo(x,y);
-                }
-            }
-
-            // lower line (right to lext)
-            for (let i = SEIRDataOverTime.length - 1; i>=0; i--) {
-                const t = SEIRDataOverTime[i].time;
-                const x = margin + t * xScale;
-                const y = height - margin - getYbottom(i) * yScale;
-                chartCtx.lineTo(x, y);
-            }
-            chartCtx.closePath();
-            chartCtx.fillStyle = colour;
-            //chartCtx.globalAlpha = 0.6;
-            chartCtx.fill();
-            //chartCtx.globalAlpha = 1.0;
-        }
-
-        // Draw all SEIR layer
-        // for "recovered" state
-        drawArea(i => getStackedValues(i).R, i => 0, recoveredColor)
-        // for "Infected" state
-        drawArea(i => getStackedValues(i).RI, i => getStackedValues(i).R, infectedColor)
-        // for "exposed" state
-        drawArea(i => getStackedValues(i).RIE, i => getStackedValues(i).RI, exposedColor)
-        // for "Susceptible" state
-        drawArea(i => getStackedValues(i).REIS, i => getStackedValues(i).RIE, susceptibleColor)
-
-        // Define stroke line
-        chartCtx.strokeStyle = "#333";              // Set the stroke (line) colour to dark grey (#333)
-        chartCtx.lineWidth = 1;                     // Set the line thickness to 1 pixel
-
-        // draw Y-axis
-        chartCtx.beginPath();                       // Start a new drawing path
-        chartCtx.moveTo(margin, margin);            // Move the pen to the top-left corner of the plot area (left margin, top margin)
-        chartCtx.lineTo(margin, height - margin);   // Draw a vertical line down to the bottom-left corner of the plot area
-        chartCtx.stroke();                          // Render the vertical line on the canvas
-
-        // draw x-axis
-        chartCtx.beginPath();                       // Start a new drawing path
-        chartCtx.moveTo(margin, height - margin);   // Move the pen to the bottom-left corner of the plot area
-        chartCtx.lineTo(width - margin, height - margin); // Draw a horizontal line to the bottom-right corner of the plot area
-        chartCtx.stroke();                          // Render the horizontal line on the canvas
-
-    }
-
     // How often in second the log SEIR counts
     const logInterval = 0.1; //in second
     let timeAccumulator = 0; // set initial time
@@ -415,18 +299,6 @@
         
         drawScene();   
         
-        //countSEIRStates();                          // calling the function to log the SEIR count
-        // drawSEIRChart();
-
-        // call to count SEIR data over time
-        timeAccumulator += deltaTime;                   // to calculate how long the simulation running
-        if (timeAccumulator >= logInterval){
-            countSEIRStates();                          // calling the function to log the SEIR count
-            //drawSEIRChart();  // <-- draw chart here
-            timeAccumulator = 0;
-        }
-
-        
         animationId = requestAnimationFrame(animate);                 // To schedule next frame (re-run animation) before processing and capture the ID  
     }
 
@@ -441,8 +313,8 @@
         }
 
         // Reset timing variables -- basically decalring everyting to null or zero again 
-        simulationStartTime = performance.now();
-        SEIRDataOverTime.length = 0;
+        // simulationStartTime = performance.now();
+        // SEIRDataOverTime.length = 0;
         timeAccumulator = 0;
         lastTime = performance.now();
 
@@ -483,16 +355,10 @@
 
         // Clear the entire canvas to start fresh
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-
-        // Clear the entire canvas to start fresh
-        chartCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-
     }
 
 
-    window.sim_od_agent = { 
+    window.sim_seir_1_agent = { 
         start, 
         stop,
         reset // Optional but useful for debugging
