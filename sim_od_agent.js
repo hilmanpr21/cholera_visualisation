@@ -13,7 +13,7 @@
     // define waterbodies at the start
     const contaminatedWaterbodies = [
         { 
-            x: canvas.width * 0.5,         // define x-center point
+            x: canvas.width * 0.1,         // define x-center point
             y: canvas.height * 0.5,          // define y-center point
             radius: 40      // radius of the waterbody
         }
@@ -21,37 +21,12 @@
 
     // Function to store agent's initial characters
     function createAgent(){
-        const radius = 10;
-        let x, y, valid = false;
-
-        while (!valid) {
-            x = Math.random() * (canvas.width - 2 * radius) + radius;
-            y = Math.random() * (canvas.height - 2 * radius) + radius;
-            valid = true;
-
-            // check waterbody collision
-            for (const waterbody of contaminatedWaterbodies) {
-                const dx = x - waterbody.x;
-                const dy = y - waterbody.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < waterbody.radius + radius + 5) {
-                    valid = false;
-                    break;
-                }
-            }
-
-            // Check boundaries
-            if (x <= radius || x >= canvas.width - radius || y <= radius || y >= canvas.height - radius) {
-                valid = false;
-            }
-        }
-        
         return {
-            x,      // starting x position
-            y,     // starting y position 
-            radius,  // the agent cirle radius size
-            vx: (Math.random() - 0.5) * 8,      // velocity in x (pixels per frame), random velocity between -4 and +4
-            vy: (Math.random() - 0.5) * 8,      // velocity in y (pixels per frame), random velocity between -4 and +4   
+            x: canvas.height * 0.7,      // starting x position
+            y: canvas.height * 0.5,     // starting y position 
+            radius: 15,  // the agent cirle radius size
+            vx: -2.5,      // velocity in x (pixels per frame), random velocity between -4 and +4
+            vy: 0,      // velocity in y (pixels per frame), random velocity between -4 and +4   
             state: "susceptible", // initial state of SEIR
             statetimer: 0, // define how many secons in this current state
         }
@@ -63,12 +38,16 @@
         agents.push(createAgent());
     }
 
+    // fuction to draw 
 
     // function to draw the scene
     function drawScene() {
         
         // Clear the entire canvas to start fresh
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw timeline markers first (so they appear behind other elements)
+        drawTimelineMarkers();
 
         // Draw contaminated waterbody
         for (const waterbodies of contaminatedWaterbodies) {
@@ -79,7 +58,7 @@
             //ctx.stroke();
             ctx.closePath();
         }
-        
+
         //Draw the 100 agent
         agents.forEach(drawAgent);
     }
@@ -108,9 +87,9 @@
         }
 
         ctx.fill();
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        // ctx.strokeStyle = '#333';
+        // ctx.lineWidth = 1;
+        // ctx.stroke();
         ctx.closePath();
     }
 
@@ -125,6 +104,13 @@
         }
         if (agentInput.y <= agentInput.radius || agentInput.y >=canvas.height - agentInput.radius) {
             agentInput.vy *= -1;
+        }
+        
+        // make agent bounce back after recovered state
+        if (agentInput.x >= canvas.width*0.92 - agentInput.radius) {
+            agentInput.vx *= -1;
+            agentInput.state = "susceptible"; // reset the state to susceptible
+            agentInput.statetimer = 0; // reset the state timer
         }
 
         // bounce when agent touch contaminated waterbodies
@@ -149,14 +135,14 @@
         switch (agentInput.state) {
             case "exposed":
                 agentInput.statetimer += deltaTime;
-                if (agentInput.statetimer >= 5) {       // checking the condition where the agent have been int he exposed state more than 5 seconds
+                if (agentInput.statetimer >= 0.8) {       // checking the condition where the agent have been int he exposed state more than 5 seconds
                     agentInput.state = "infected";      // change the state to infected
                     agentInput.statetimer = 0;          // Set the timer to 0 again
                 }
                 break;
             case "infected":
                 agentInput.statetimer += deltaTime;
-                if (agentInput.statetimer >= 10) {      // checking the condition where the agent have been in the infected state more than 10 seconds
+                if (agentInput.statetimer >= 1.6) {      // checking the condition where the agent have been in the infected state more than 10 seconds
                     agentInput.state = "recovered";     // change the state to recovered
                     agentInput.statetimer = 0;          // Set the timer to 0 again
                 }
@@ -179,6 +165,81 @@
         lastTime = currentTimeInput;                                // Assign new lastTime with currentTime for the next frame calculation
         return deltaTime;                                           // Return the result of deltatime
     }
+
+    // Draw timeline markers
+    function drawTimelineMarkers() {
+        // Get the agent's current state
+        const agentState = agents[0].state; // agents[0] Assuming we are only drawing for the first agent
+        
+        // get the agent's position
+        const agentX = agents[0].x; 
+
+        // Only draw markers if agent is not in susceptible state
+        if (agentState === "susceptible" && agentX < canvas.width * 0.45) {
+            return; // Don't draw any markers
+        }
+
+        const markerData = [
+            { day: "Day 0", x: canvas.width * 0.1 + 40, state: "Exposed" },   // Near contaminated water
+            { day: "Day 5", x: canvas.width * 0.30, state: "Infected" },  // Somewhere along the path
+            { day: "Day 15", x: canvas.width * 0.6, state: "Recovered" },  // Mid-recovery
+            { day: "Day 215", x: canvas.width * 0.90, state: "Susceptible" } // End of cycle
+        ];
+
+        // Filter markers based on agent's current state
+        // make a new array to store visible markers
+        let visibleMarkers = [];
+        
+        // Filter markers based on the agent's current state
+        if (agentState === "exposed") {
+            visibleMarkers = [markerData[0]]; // Only show exposed marker
+        } else if (agentState === "infected") {
+            visibleMarkers = [markerData[0], markerData[1]]; // Only show exposed marker and infected marker
+        } else if (agentState === "recovered") {
+            visibleMarkers = [markerData[0], markerData[1], markerData[2]]; // Only show exposed, infected, and recovered marker
+        } else if (agentState === "susceptible" && agentX > canvas.width * 0.75) {
+            visibleMarkers = markerData; // Show all markers
+        }
+        
+        ctx.font = "bold 16px Arial";
+        //ctx.fillStyle = "#333"; //to colour the text
+        ctx.textAlign = "center";
+        
+        // Draw each marker
+        visibleMarkers.forEach(marker => {
+            // Draw vertical line
+            ctx.beginPath();
+            ctx.strokeStyle = "#888";
+            ctx.setLineDash([5, 3]); // Dashed line
+            ctx.moveTo(marker.x, canvas.height * 0.5 - 45);
+            ctx.lineTo(marker.x, canvas.height * 0.5 + 45);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset to solid line
+
+            // Set text color based on state
+            switch (marker.state) {
+                case "Susceptible":
+                    ctx.fillStyle = susceptibleColor;
+                    break;
+                case "Exposed":
+                    ctx.fillStyle = exposedColor;
+                    break;
+                case "Infected":
+                    ctx.fillStyle = infectedColor;
+                    break;
+                case "Recovered":
+                    ctx.fillStyle = recoveredColor;
+                    break;
+                default:
+                    ctx.fillStyle = "#333";
+            }
+            
+            // Draw day text
+            ctx.fillText(marker.day, marker.x, canvas.height * 0.5 - 65);
+            ctx.fillText(marker.state, marker.x, canvas.height * 0.5 - 50);
+        });
+    }
+
 
     // Logic detect contacting contaminated waterbody
     function touchingContaminatedWater(agentInput) {
@@ -236,11 +297,11 @@
         // console.log("SEIR Count at t =", count.time, count);
 
         // update DOM stats 
-        document.getElementById('timeCount').textContent = count.time.toFixed(0);
-        document.getElementById('susceptibleCount').textContent = count.susceptible;
-        document.getElementById('exposedCount').textContent = count.exposed;
-        document.getElementById('infectedCount').textContent = count.infected;
-        document.getElementById('recoveredCount').textContent = count.recovered;
+        // document.getElementById('timeCount').textContent = count.time.toFixed(0);
+        // document.getElementById('susceptibleCount').textContent = count.susceptible;
+        // document.getElementById('exposedCount').textContent = count.exposed;
+        // document.getElementById('infectedCount').textContent = count.infected;
+        // document.getElementById('recoveredCount').textContent = count.recovered;
 
         return count;
 
@@ -361,7 +422,7 @@
         timeAccumulator += deltaTime;                   // to calculate how long the simulation running
         if (timeAccumulator >= logInterval){
             countSEIRStates();                          // calling the function to log the SEIR count
-            drawSEIRChart();  // <-- draw chart here
+            //drawSEIRChart();  // <-- draw chart here
             timeAccumulator = 0;
         }
 

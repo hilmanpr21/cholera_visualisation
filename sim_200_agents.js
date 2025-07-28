@@ -13,7 +13,7 @@
     // define waterbodies at the start
     const contaminatedWaterbodies = [
         { 
-            x: canvas.width * 0.5,         // define x-center point
+            x: canvas.width * 0.3,         // define x-center point
             y: canvas.height * 0.5,          // define y-center point
             radius: 40      // radius of the waterbody
         }
