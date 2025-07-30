@@ -11,7 +11,8 @@ document.addEventListener('DOMContentLoaded', function() {
         sim_seir_1_agent: window.sim_seir_1_agent,
         sim_od_200_agents: window.sim_od_200_agents,
         sim_waterbody_to_contaminated_waterbody: window.sim_waterbody_to_contaminated_waterbody,
-        sim_waterbody_to_contaminated_waterbody_with_house: window.sim_waterbody_to_contaminated_waterbody_with_house
+        sim_waterbody_to_contaminated_waterbody_with_house: window.sim_waterbody_to_contaminated_waterbody_with_house,
+        sim_depr_mobility: window.sim_depr_mobility
     };
     
     // Function to handle step enter (when a new step becomes active)
