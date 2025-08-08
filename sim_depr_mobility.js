@@ -65,15 +65,61 @@
         recovered: 0
     };
 
+    // Track which grid cells are occupied by buildings
+    const occupiedGridCells = new Set();
+
+    // Function to get a free grid cell and mark it as occupied
+    function getAvailableGridCell(minGridX, maxGridX, minGridY, maxGridY) {
+        const attempts = 100; // Max attempts to find a free cell
+        
+        for (let i = 0; i < attempts; i++) {
+            // Generate random grid coordinates within the specified range
+            const gridX = minGridX + Math.floor(Math.random() * (maxGridX - minGridX + 1));
+            const gridY = minGridY + Math.floor(Math.random() * (maxGridY - minGridY + 1));
+            const cellKey = `${gridX},${gridY}`;
+            
+            // Check if this grid cell is free
+            if (!occupiedGridCells.has(cellKey)) {
+                // Mark this cell as occupied
+                occupiedGridCells.add(cellKey);
+                
+                // Return the center coordinates of this grid cell
+                const centerX = (gridX + 0.5) * gridSize;
+                const centerY = (gridY + 0.5) * gridSize;
+                
+                return { x: centerX, y: centerY };
+            }
+        }
+        
+        // Fallback if no free cell found
+        console.warn("No free grid cell found, using fallback position");
+        const fallbackX = (minGridX + Math.random() * (maxGridX - minGridX)) * gridSize + gridSize/2;
+        const fallbackY = (minGridY + Math.random() * (maxGridY - minGridY)) * gridSize + gridSize/2;
+        return { x: fallbackX, y: fallbackY };
+    }
+
     // Function to store agent's initial characters
     function createAgent(){
-        // Determine home position based on canvas size
-        const houseX = Math.random() * (canvas.width / 3);      // define the house X coordinate
-        const houseY = Math.random() * canvas.height;     // define the house y coordinate
-
-        // determine work position based on canvas size
-        const workX = (2/3 * canvas.width) + Math.random() * (canvas.width / 3);
-        const workY = Math.random() * canvas.height;
+        // Calculate grid boundaries for house area (left middle section)
+        const houseMinGridX = Math.floor((canvas.width * 0.1) / gridSize);  // 10% from left
+        const houseMaxGridX = Math.floor((canvas.width * 0.4) / gridSize);  // 40% from left
+        const houseMinGridY = Math.floor((canvas.height * 0.2) / gridSize); // 20% from top
+        const houseMaxGridY = Math.floor((canvas.height * 0.8) / gridSize); // 80% from top
+        
+        // Calculate grid boundaries for work area (right middle section)
+        const workMinGridX = Math.floor((canvas.width * 0.6) / gridSize);   // 60% from left
+        const workMaxGridX = Math.floor((canvas.width * 0.9) / gridSize);   // 90% from left
+        const workMinGridY = Math.floor((canvas.height * 0.2) / gridSize);  // 20% from top
+        const workMaxGridY = Math.floor((canvas.height * 0.8) / gridSize);  // 80% from top
+        
+        // Get available grid cells for house and work
+        const housePosition = getAvailableGridCell(houseMinGridX, houseMaxGridX, houseMinGridY, houseMaxGridY);
+        const workPosition = getAvailableGridCell(workMinGridX, workMaxGridX, workMinGridY, workMaxGridY);
+        
+        const houseX = housePosition.x;
+        const houseY = housePosition.y;
+        const workX = workPosition.x;
+        const workY = workPosition.y;
 
         const agent =  {
             x: houseX,      // starting x position
@@ -185,11 +231,11 @@
 
     // function to choose return target
     function chooseReturnTarget(agentInput) {
-        // Gett all cell that has been visited by the agent
+        // Get all cell that has been visited by the agent
         const visitedLocations = Object.keys(agentInput.visitedCells);
 
         // if no visited locations, return current position
-        // this case shuld not happen in normal operation, but it's a safety check
+        // this case should not happen in normal operation, but it's a safety check
         if (visitedLocations.length === 0) {
             return { x: agentInput.x, y: agentInput.y }; // return current position
         }
@@ -441,7 +487,7 @@
             // check if the agent is touching waterbody or not
             // contaminted water body has radius 40
             // if the distance between centres is less than the total of waterbody's radius and agent's radius, it means it is touching or even overlap
-            return distance <= 40 + agentInput.radius;
+            return distance <= waterbodies.radius + agentInput.radius;
         }
     }
 
@@ -465,7 +511,7 @@
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             // Check if agent touching waterbody
-            if (distance  <=  agentInput.speed + waterbody.radius) {
+            if (distance  <=  agentInput.radius + waterbody.radius) {
 
                 //console.log(`Before transfer - Agent state: ${agentInput.state}, Agent bacteria: ${agentInput.bacteria}, Water bacteria: ${waterbody.bacteria}`);
 
@@ -527,7 +573,7 @@
 
     // MAKE THE CHART
     function drawSEIRChart() {
-        if (SEIRDataOverTime.length < 1 ) return;
+        if (SEIRDataOverTime.length < 0 ) return;
 
         const width = chartCanvas.width;                // Define the Canvas width
         const height = chartCanvas.height;              // Define canvas Height
@@ -650,6 +696,9 @@
     //declare reset function
     function reset() {
         console.log("resetting simulation");
+
+        // Clear occupied grid cells so new buildings can be placed
+        occupiedGridCells.clear();
 
         // recreate agents array 
         agents = [];

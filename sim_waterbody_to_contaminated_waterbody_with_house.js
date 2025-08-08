@@ -163,10 +163,12 @@
             const dy = cleanWaterbodies[0].y - agentInput.y; // calculate the distance in y-axis
             const distance = Math.sqrt(dx * dx + dy * dy); // calculate the straight line distance between agent and waterbody
 
-            if (distance - cleanWaterbodies[0].radius > agentInput.speed) {
+            if (distance - cleanWaterbodies[0].radius > agentInput.speed) { // check if the agent is far enough from the waterbody
+                // Move towards the clean waterbody
                 agentInput.x += (dx / distance) * agentInput.speed;       // to find new x posiiton. (dx / distance) is cos -> cos * agent.speed = x-coordinate position
                 agentInput.y += (dy / distance) * agentInput.speed;       // to find new y posiiton. (dy / distance) is sin -> sin * agent.speed = y-coordinate position
-            } else {
+            } else {        // if the agent is close enough to the clean waterbody
+                // Check the agent state to decide the next target
                 if (agentInput.state === "susceptible") {
                     agentInput.target = 'contaminatedWaterbody'; // if the agent is close enough to the clean waterbody, change the target to contaminated waterbody
                 } else {
@@ -180,10 +182,12 @@
             const dy = contaminatedWaterbodies[0].y - agentInput.y; // calculate the distance in y-axis
             const distance = Math.sqrt(dx * dx + dy * dy); // calculate the straight line distance between agent and waterbody
 
-            if (distance - contaminatedWaterbodies[0].radius > agentInput.speed) {
+            if (distance - contaminatedWaterbodies[0].radius > agentInput.speed) {  // check if the agent is far enough from the contaminated waterbody 
+                // Move towards the contaminated waterbody
                 agentInput.x += (dx / distance) * agentInput.speed;       // to find new x posiiton. (dx / distance) is cos -> cos * agent.speed = x-coordinate position
                 agentInput.y += (dy / distance) * agentInput.speed;       // to find new y posiiton. (dy / distance) is sin -> sin * agent.speed = y-coordinate position
-            } else {
+            } else {     // if the agent is close enough to the contaminated waterbody  
+                // Check the agent state to decide the next target
                 agentInput.target = 'home'; // if the agent is close enough to the contaminated waterbody, change the target to home
             }
         }

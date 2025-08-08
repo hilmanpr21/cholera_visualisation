@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', function() {
         scroller
             .setup({
                 step: '.step',          // Steps are elements with class 'step'
-                offset: 0.5,            // Trigger when step is 50% in viewport
+                offset: 0.7,            // Trigger when step is 50% in viewport
                 debug: false,           // Set to true to see trigger points
                 progress: false         // We don't need progress updates
             })
@@ -71,13 +71,13 @@ document.addEventListener('DOMContentLoaded', function() {
             .onStepExit(handleStepExit);
         
         // Start the first simulation by default
-        simulations.sim_200_agents.start();
-        currentSimulation = simulations.sim_200_agents;
-        
+        simulations.sim_seir_1_agent.start();
+        currentSimulation = simulations.sim_seir_1_agent;
+
         // Handle window resize
         window.addEventListener('resize', scroller.resize);
     }
     
-    // Initialize
+    // Initialize the scroll function by calling `init()` function
     init();
 });
