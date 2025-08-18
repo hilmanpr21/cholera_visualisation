@@ -95,7 +95,7 @@
         { 
             x: canvas.width * 0.5,         // define x-center point
             y: canvas.height * 0.3,          // define y-center point
-            radius: 30      // radius of the waterbody
+            radius: 20      // radius of the waterbody
         }
     ];
 
@@ -105,7 +105,7 @@
         { 
             x: canvas.width * 0.5,         // define x-center point
             y: canvas.height * 0.7,          // define y-center point
-            radius: 30,      // radius of the waterbody
+            radius: 20,      // radius of the waterbody
             isContaminated: false, // define if the waterbody is contaminated or not
             bacteria: 0, // define the bacteria count in the waterbody
             contaminationLevel: 0,         // visual representation of contamination (0 to 1)
@@ -345,8 +345,8 @@
         //Draw the agent and their house
         agents.forEach(agent => {
             drawHouse(agent);
-            drawAgent(agent);
             drawWork(agent);
+            drawAgent(agent);
         });
     }
 

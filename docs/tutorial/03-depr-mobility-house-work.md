@@ -26,7 +26,7 @@ Brief description of what this tutorial covers and why it's important.
 
 In the previous version we were just generate the house and work in random point in the file `sim_depr_mobility.js`
 
-```{javascript}
+``` javascript
 // Function to store agent's initial characters
     function createAgent(){
         // Determine home position based on canvas size
@@ -92,12 +92,11 @@ Add this on the file `sim_depr_mobility.js` add this step before declaring the f
 
 `sim_depr_mobility.js` (line 68-69)
 
-```{javascript}
+``` javascript
 // Add this before declaring function `createAgent()`
 
 // Track which grid cells are occupied by buildings
  const occupiedGridCells = new Set();
-
 
 ```
 
@@ -113,7 +112,7 @@ Add this on the file `sim_depr_mobility.js` add this step before declaring the f
 
 ## **2. Step 2: Finding Available Grid Cells**
 
-```{javascript}
+``` javascript
 /// Add this script before declaring the function `createAgent()` but after the previous step
 
  // Function to get a free grid cell and mark it as occupied
@@ -163,7 +162,7 @@ Add this on the file `sim_depr_mobility.js` add this step before declaring the f
 
 ### 2.1 Function Declaration
 
-```{javascript}
+``` javascript
 function getAvailableGridCell(minGridX, maxGridX, minGridY, maxGridY) {
 ```
 
@@ -193,7 +192,7 @@ const attempts = 100; // Max attempts to find a free cell
 
 ## 2.3 Main Search Loop
 
-```{javascript}
+``` javascript
 for (let i = 0; i < attempts; i++) {
     .....
 }
@@ -209,7 +208,7 @@ for (let i = 0; i < attempts; i++) {
 
 ## 2.4 Random Grid Coordinate Generation
 
-```{javascript}
+``` javascript
 // Generate random grid coordinates within the specified range
 const gridX = minGridX + Math.floor(Math.random() * (maxGridX - minGridX + 1));
 const gridY = minGridY + Math.floor(Math.random() * (maxGridY - minGridY + 1));
@@ -251,7 +250,7 @@ const gridY = minGridY + Math.floor(Math.random() * (maxGridY - minGridY + 1));
 
 ## 2.5 Grid Cell Key Creation
 
-```{javascript}
+``` javascript
 const cellKey = `${gridX},${gridY}`;
 ```
 
@@ -267,7 +266,7 @@ const cellKey = `${gridX},${gridY}`;
 
 ## 2.5 Checking Availability
 
-```{javascript}
+``` javascript
 // Check if this grid cell is free
 if (!occupiedGridCells.has(cellKey)) {
 ```
@@ -286,7 +285,7 @@ if (!occupiedGridCells.has(cellKey)) {
 
 ## 2.6 **Marking Cell as Occupied**
 
-```{javascript}
+``` javascript
 // Mark this cell as occupied
 occupiedGridCells.add(cellKey);
 ```
@@ -301,7 +300,7 @@ occupiedGridCells.add(cellKey);
 
 ## 2.7 **Converting to Canvas Coordinates**
 
-```{javascript}
+``` javascript
 // Return the center coordinates of this grid cell
 const centerX = (gridX + 0.5) * gridSize;
 const centerY = (gridY + 0.5) * gridSize;
@@ -333,7 +332,7 @@ Adding 0.5 moves us to the center of the cell
 
 ## 2.8. Fallback system
 
-```{javascript}
+``` javascript
 // Fallback if no free cell found
 console.warn("No free grid cell found, using fallback position");
 const fallbackX = (minGridX + Math.random() * (maxGridX - minGridX)) * gridSize + gridSize/2;
@@ -357,37 +356,34 @@ NOTE that `grid` is the cell coordinate within the grid system which is differen
 
 Update the function `createAgent` with this code:
 
-```{// Function to store agent's initial characters}
-function createAgent(){
-    // Calculate grid boundaries for house area (left middle section)
-    const houseMinGridX = Math.floor((canvas.width * 0.1) / gridSize);  // 10% from left
-    const houseMaxGridX = Math.floor((canvas.width * 0.4) / gridSize);  // 40% from left
-    const houseMinGridY = Math.floor((canvas.height * 0.2) / gridSize); // 20% from top
-    const houseMaxGridY = Math.floor((canvas.height * 0.8) / gridSize); // 80% from top
-    
-    // Calculate grid boundaries for work area (right middle section)
-    const workMinGridX = Math.floor((canvas.width * 0.6) / gridSize);   // 60% from left
-    const workMaxGridX = Math.floor((canvas.width * 0.9) / gridSize);   // 90% from left
-    const workMinGridY = Math.floor((canvas.height * 0.2) / gridSize);  // 20% from top
-    const workMaxGridY = Math.floor((canvas.height * 0.8) / gridSize);  // 80% from top
-    
-    // Get available grid cells for house and work
-    const housePosition = getAvailableGridCell(houseMinGridX, houseMaxGridX, houseMinGridY, houseMaxGridY);
-    const workPosition = getAvailableGridCell(workMinGridX, workMaxGridX, workMinGridY, workMaxGridY);
-    
-    const houseX = housePosition.x;
-    const houseY = housePosition.y;
-    const workX = workPosition.x;
-    const workY = workPosition.y;
+\`\`\`{// Function to store agent's initial characters} function createAgent(){ // Calculate grid boundaries for house area (left middle section) const houseMinGridX = Math.floor((canvas.width \* 0.1) / gridSize); // 10% from left const houseMaxGridX = Math.floor((canvas.width \* 0.4) / gridSize); // 40% from left const houseMinGridY = Math.floor((canvas.height \* 0.2) / gridSize); // 20% from top const houseMaxGridY = Math.floor((canvas.height \* 0.8) / gridSize); // 80% from top
+
+```         
+// Calculate grid boundaries for work area (right middle section)
+const workMinGridX = Math.floor((canvas.width * 0.6) / gridSize);   // 60% from left
+const workMaxGridX = Math.floor((canvas.width * 0.9) / gridSize);   // 90% from left
+const workMinGridY = Math.floor((canvas.height * 0.2) / gridSize);  // 20% from top
+const workMaxGridY = Math.floor((canvas.height * 0.8) / gridSize);  // 80% from top
+
+// Get available grid cells for house and work
+const housePosition = getAvailableGridCell(houseMinGridX, houseMaxGridX, houseMinGridY, houseMaxGridY);
+const workPosition = getAvailableGridCell(workMinGridX, workMaxGridX, workMinGridY, workMaxGridY);
+
+const houseX = housePosition.x;
+const houseY = housePosition.y;
+const workX = workPosition.x;
+const workY = workPosition.y;
+```
 
 // The rest of the code goes here
-    
+
 }
-```
+
+```         
 
 **Breakdown:**
 
-```{javascript}
+```javascript
 // Calculate grid boundaries for house area (left middle section)
 const houseMinGridX = Math.floor((canvas.width * 0.1) / gridSize);  // 10% from left
 const houseMaxGridX = Math.floor((canvas.width * 0.4) / gridSize);  // 40% from left
@@ -403,7 +399,7 @@ const workMaxGridY = Math.floor((canvas.height * 0.8) / gridSize);  // 80% from 
 
 -   Defining the housing and working area
 
-```{javascript}
+``` javascript
 // Get available grid cells for house and work
 const housePosition = getAvailableGridCell(houseMinGridX, houseMaxGridX, houseMinGridY, houseMaxGridY);
 const workPosition = getAvailableGridCell(workMinGridX, workMaxGridX, workMinGridY, workMaxGridY);
@@ -413,7 +409,7 @@ const workPosition = getAvailableGridCell(workMinGridX, workMaxGridX, workMinGri
 
 # 4. **Step 4: Memory Management**
 
-```{Javascript}
+``` javascript
 function reset() {
     // Clear occupied grid cells so new buildings can be placed
     occupiedGridCells.clear();
