@@ -12,6 +12,62 @@
     const infectedColor = style.getPropertyValue('--infected-color');
     const recoveredColor = style.getPropertyValue('--recovered-color');
 
+    // Time management system for Daily Schedule
+    const timeManager = {
+        scheduleStartTime: 5,           // Start schedule at 5am instead of midnight
+        currentSimulationTime: 0,
+        timeScale: 1,                   // how many hour per second
+
+        getCurrentHour: function() {
+            return Math.floor((this.currentSimulationTime * this.timeScale) + this.scheduleStartTime) % 24; // Get current hour (0-23) starting from 3am
+        },
+
+        update: function(deltaTime) {
+            this.currentSimulationTime += deltaTime;    // Update current simulation time
+        },
+
+        reset: function() {
+            this.currentSimulationTime = 0;
+        },
+
+        getTimeString: function() {
+            const hour = this.getCurrentHour();
+            return `${hour.toString().padStart(2, '0')}:00`;  // Format: HH:MM for the time
+        }
+    }
+
+    // declare function to display current simulation time
+    function displaySimulationTime() {
+        const timeString = timeManager.getTimeString();
+        const hour = timeManager.getCurrentHour();
+
+        // Get the existing elements from HTML
+        let timeDisplay = document.getElementById('timeCount');
+        let periodDisplay = document.getElementById('activityPeriodTime');
+
+        // Show time with period indicator
+        let period = '';
+        if (hour >= 23 || hour < 5 ) period = 'Home';
+        else if ( hour > 5 && hour < 9 ) period = 'Morning mobility';
+        else if ( hour >= 9 && hour < 15 ) period = 'Work';
+        else if ( hour >= 15 && hour < 23 ) period = 'Evening Mobility';
+
+        // Update both display elements separately
+        timeDisplay.innerHTML = timeString;
+        periodDisplay.innerHTML = period;
+
+        console.log(`Current time: ${timeString}, Period: ${period}`); // Log the current time and period
+    }
+
+    // declare function for scheduling
+    function getCurrentScheduleMode(hourInput) {
+        if (hourInput >= 23 || hourInput < 5 ) return 'atHome';
+        if (hourInput >= 5 && hourInput < 9 ) return 'deprMobile';
+        if (hourInput >= 9 && hourInput < 15 ) return 'atWork';
+        if (hourInput >= 15 && hourInput < 23 ) return 'deprMobile';
+        return 'deprMobile';        // as a fallback 
+    }
+    
     // Grid System Setup
     const gridSize = 20; // Size of each grid cell 20x20 pixels
 
@@ -101,17 +157,17 @@
     // Function to store agent's initial characters
     function createAgent(){
         // Calculate grid boundaries for house area (left middle section)
-        const houseMinGridX = Math.floor((canvas.width * 0.1) / gridSize);  // 10% from left
+        const houseMinGridX = Math.floor((canvas.width * 0) / gridSize);  // 0% from left
         const houseMaxGridX = Math.floor((canvas.width * 0.4) / gridSize);  // 40% from left
-        const houseMinGridY = Math.floor((canvas.height * 0.2) / gridSize); // 20% from top
-        const houseMaxGridY = Math.floor((canvas.height * 0.8) / gridSize); // 80% from top
+        const houseMinGridY = Math.floor((canvas.height * 0) / gridSize); // 0% from top
+        const houseMaxGridY = Math.floor((canvas.height * 1) / gridSize); // 100% from top
         
         // Calculate grid boundaries for work area (right middle section)
         const workMinGridX = Math.floor((canvas.width * 0.6) / gridSize);   // 60% from left
-        const workMaxGridX = Math.floor((canvas.width * 0.9) / gridSize);   // 90% from left
-        const workMinGridY = Math.floor((canvas.height * 0.2) / gridSize);  // 20% from top
-        const workMaxGridY = Math.floor((canvas.height * 0.8) / gridSize);  // 80% from top
-        
+        const workMaxGridX = Math.floor((canvas.width * 1) / gridSize);   // 90% from left
+        const workMinGridY = Math.floor((canvas.height * 0) / gridSize);  // 0% from top
+        const workMaxGridY = Math.floor((canvas.height * 1) / gridSize);  // 100% from top
+
         // Get available grid cells for house and work
         const housePosition = getAvailableGridCell(houseMinGridX, houseMaxGridX, houseMinGridY, houseMaxGridY);
         const workPosition = getAvailableGridCell(workMinGridX, workMaxGridX, workMinGridY, workMaxGridY);
@@ -157,6 +213,16 @@
             currentTarget: null, // current movement target cell
             rho: 0.5, // exploration parameter (0 < rho < 1)
             gamma: 0.2, // return decay parameter (0 < gamma < 1)
+
+            // scheduler specific properties
+            scheduleMode: 'atHome', // start scheduling mode at home
+            previousMode: null,     // to track mode changes
+
+            // d-EPR state preservation for smooth transition between mode
+            deprState: {
+                savedTarget: null,      // Save d-epr target when entering home/work mode
+                wasExploring: false     // remember if agemt was exploring 
+            },
         }
 
         // mark home location as visited, since the agent starts at home
@@ -186,22 +252,6 @@
         return distance < agentInput.radius; // if distance is less than agent's radius, consider it reached
     }
 
-    // function to move agent towards its target
-    function moveTowardTarget(agentInput) {
-        if (!agentInput.currentTarget) return; // if no target, do nothing
-
-        // Calculate direction vector and the distance between the target and agent current position
-        const dx = agentInput.currentTarget.x - agentInput.x;
-        const dy = agentInput.currentTarget.y - agentInput.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        // Move agent towards target
-        if (distance > 0) {
-            agentInput.x += (dx / distance) * agentInput.speed; // calculate x direction by speed
-            agentInput.y += (dy / distance) * agentInput.speed; // calculate y direction by speed
-        }
-    }
-
     // Declare function to choose new exploration target
     function chooseNewExplorationTarget(agentInput) {
         // get grid height and width
@@ -216,7 +266,7 @@
             const gridY = Math.floor(Math.random() * gridHeight); // random y coordinate
             const cellKey = `${gridX},${gridY}`; // create cell key
 
-            if (!agentInput.visitedCells[cellKey]) { // if the cell never been visited
+            if (!agentInput.visitedCells[cellKey]) { // check if the cell never been visited
                 // return the center of the cell as the new target
                 return grid.getCellCenter(cellKey);
             }
@@ -258,6 +308,21 @@
         // Fallback to home
         console.log("Agent defaulting to return home");
         return agent.home;
+    }
+
+    // function to move agent to specific location (like home or work)
+    function moveTowardsLocation(agentInput, targetLocationInput) {
+        // Calculate distance between current position with the target location
+        const dx = targetLocationInput.x - agentInput.x;
+        const dy = targetLocationInput.y - agentInput.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > 0) {
+            // Agent not at target position yet - move towards target location
+            agentInput.x += (dx / distance) * agentInput.speed;                
+            agentInput.y += (dy / distance) * agentInput.speed;
+        } 
+        // else: Agent is already at target position (distance = 0) - stop moving
     }
 
     // function to draw the scene
@@ -399,11 +464,17 @@
         }
     }
 
-    // update agent position or agent movement
-    function updateAgentMovement(agentInput) {
+    // Function to handle d-EPR mmovement 
+    function handleDEPMovement(agentInput) {
+
+        // If agent is at home or work Aand moved back to depr mobility mode
+        if (!agentInput.currentTarget && agentInput.deprState.savedTarget) {
+            agentInput.currentTarget = agentInput.deprState.savedTarget;
+            agentInput.deprState.savedTarget = null;                            // clear the caved target again
+        }
 
         // if agent has no target or has reached the current target, choose a new target
-        // d-EPR model implememntation
+        // d-EPR model implementation
         if( !agentInput.currentTarget || reachedTarget(agentInput)) {
             // decide whether to explore or return based on d-EPR formula
             const pNew = agentInput.rho * Math.pow(agentInput.uniqueVisitCount, -agentInput.gamma); // calculate the probability of choosing a new target
@@ -418,7 +489,7 @@
         }
 
         // Move towards the current target
-        moveTowardTarget(agentInput);
+        moveTowardsLocation(agentInput, agentInput.currentTarget);
 
         // track the current cell visitation
         const currentCellKey = grid.getCellKey(agentInput.x, agentInput.y); // get the current cell key based on agent's position
@@ -427,6 +498,68 @@
             agentInput.uniqueVisitCount++; // increment unique visit count
         }
         agentInput.visitedCells[currentCellKey]++; // increment the visit count for the current cell
+    }
+
+    // Function to update agent movement based on schedule
+    function updateAgentMovement(agentInput) {
+        // get current schedule mode based on time
+        const currentHour = timeManager.getCurrentHour();
+        const newMode = getCurrentScheduleMode(currentHour); 
+
+        // Handle mode transition
+        // check if agent is changing from atHome or atWork to DEPR mobility
+        // `agentInput.scheduleMode` is agent mode in previous frame
+        if (agentInput.scheduleMode !== newMode) {
+            //save d-EPR state when leaving mobile mode
+            // if previously agent is in D-EPR mobility mode
+            if (agentInput.scheduleMode === 'deprMobile') {
+                // save the current target and state
+                agentInput.deprState.savedTarget = agentInput.currentTarget; // save the current target in the `savedTarget` to be recalled later
+                agentInput.deprState.wasExploring = true; // mark that agent was exploring
+            }
+
+            agentInput.previousMode = agentInput.scheduleMode;  // save the previous mode before changing
+            agentInput.scheduleMode = newMode;                  // set the agent mode from the new mode
+            agentInput.currentTarget = null;                    // reset the current target when changing mode
+        }
+
+        // Helper function to check if agent is close enough to target to stop moving
+        function isAtTarget(agent, target) {
+            const dx = target.x - agent.x;
+            const dy = target.y - agent.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance <= agent.speed; // If distance is less than or equal to speed, consider agent "at" target
+        }
+
+        // execute movement based on  current schedule mode
+        switch (agentInput.scheduleMode) {
+            case 'atHome':
+                // Only move if agent is not already at home
+                // check if agent is not at home, so move towards home
+                if (!isAtTarget(agentInput, agentInput.house)) {
+                    moveTowardsLocation(agentInput, agentInput.house); // move towards home
+                }
+                // else: agent is at home, stay still (no movement)
+                break;
+            
+            case 'atWork':
+                // Only move if agent is not already at work
+                // check if a
+                if (!isAtTarget(agentInput, agentInput.work)) {
+                    moveTowardsLocation(agentInput, agentInput.work); // move towards work
+                }
+                // else: agent is at work, stay still (no movement)
+                break;
+
+            case 'deprMobile':
+                handleDEPMovement(agentInput); // handle d-EPR movement
+                break;
+
+            default:
+                // fallback to d-EPR if something goes wrong
+                handleDEPMovement(agentInput);
+                break;
+        }
     }
 
 
@@ -561,7 +694,7 @@
         // console.log("SEIR Count at t =", count.time, count);
 
         // update DOM stats 
-        document.getElementById('timeCount').textContent = count.time.toFixed(0);
+        // document.getElementById('timeCount').textContent = count.time.toFixed(0);
         document.getElementById('susceptibleCount').textContent = count.susceptible;
         document.getElementById('exposedCount').textContent = count.exposed;
         document.getElementById('infectedCount').textContent = count.infected;
@@ -672,6 +805,13 @@
     function animate(currentTime) {
         const deltaTime = getDeltaTime(currentTime)     // to calculate the deltaTime
 
+        // Update simulation time
+        timeManager.update(deltaTime);
+        
+        // Update time display
+        displaySimulationTime();
+        
+        
         agents.forEach(agent => {
             changeToExposed(agent);                         // to change from susceptible to exposed
             updateAgentMovement(agent);                     // to call control agent movement
@@ -702,9 +842,12 @@
 
         // recreate agents array 
         agents = [];
-        for (let i = 0; i < 50; i++){
+        for (let i = 0; i < 2; i++){
             agents.push(createAgent())
         }
+
+        // Reset time manager when simulation resets
+        timeManager.reset();
 
         // Reset contaminated waterbodies
         // Reset clean waterbodies
