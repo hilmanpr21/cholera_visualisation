@@ -43,14 +43,14 @@
                         </div>
                     </div>
                     <canvas id="simCanvas" width="800" height="600"></canvas>
-                    <!-- Temporary debug buttons -->
-                    <!--
+                    <!-- Debug controls for pathfinding -->
                     <div class="debug-controls">
-                        <button onclick="window.sim_200_agents.start()">Start</button>
-                        <button onclick="window.sim_200_agents.stop()">Stop</button>
-                        <button onclick="window.sim_200_agents.reset()">Reset</button>
+                        <button id="pauseBtn" onclick="togglePause()">Pause</button>
+                        <button onclick="resetSimulation()">Reset</button>
+                        <label>
+                            <input type="checkbox" id="showPaths" checked> Show Agent Paths
+                        </label>
                     </div>
-                    -->
 
                 </div>
                 

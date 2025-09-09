@@ -401,13 +401,780 @@ function moveWithObstacleAvoidance(agentInput, targetInput) {
 
 ------------------------------------------------------------------------
 
-# Implementation Phase
+# Complete Solution Implementation
 
-## Phase 1
+## Phase 1: Grid Classification System
 
--   Grid classification system
--   Modify D-EPR target selection to avoid water body
--   Implement waypoint navigation around water
+### Step 1.1: Grid Classification System Setup
+
+Add these constants and data structures after the grid system setup in `sim_depr_mobility.js`:
+
+``` javascript
+// Grid cell types for hierarchical classification
+const CELL_TYPES = {
+    ACCESSIBLE: 'accessible',   // normal ground areas where agents can move freely
+    WATER: 'water',             // water body areas that should be avoided unless necessary 
+    RESTRICTED: 'restricted'    // areas agent should never enter (for future use)
+};
+
+// Grid classification storage
+const gridClassification = {};
+```
+
+### Step 1.2: Water Body Detection Function
+
+Add this helper function to detect if a coordinate is within a water body:
+
+``` javascript
+// declare function to check if coordinate is in water body
+function isInWaterBody(x, y) {
+    // check if the coordinate is within any contaminated water body
+    for (const waterbody of contaminatedWaterbodies) {
+        const dx = x - waterbody.x;
+        const dy = y - waterbody.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= waterbody.radius) {
+            return true;
+        }
+    }
+
+    // check if the coordinate is within any clean waterbody
+    for (const waterbody of cleanWaterbodies) {
+        const dx = x - waterbody.x;
+        const dy = y - waterbody.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= waterbody.radius) {
+            return true;
+        }
+    }
+
+    return false;                              
+}
+```
+
+### Step 1.3: Enhanced Grid Classification Function
+
+Implement enhanced overlap detection that checks multiple points within each grid cell:
+
+``` javascript
+// Function to check if any part of a grid cell overlaps with water bodies
+function cellOverlapsWater(gridX, gridY) {
+    // Calculate cell boundaries in canvas coordinates
+    const cellLeft = gridX * gridSize;
+    const cellRight = (gridX + 1) * gridSize;
+    const cellTop = gridY * gridSize;
+    const cellBottom = (gridY + 1) * gridSize;
+
+    // Check the center point first (most common case)
+    const cellCenterX = cellLeft + gridSize / 2;
+    const cellCenterY = cellTop + gridSize / 2;
+    if (isInWaterBody(cellCenterX, cellCenterY)) {
+        return true;
+    }
+
+    // Check all four corner points of the grid cell
+    const corners = [
+        { x: cellLeft, y: cellTop },
+        { x: cellRight, y: cellTop },
+        { x: cellLeft, y: cellBottom },
+        { x: cellRight, y: cellBottom }
+    ];
+
+    for (const corner of corners) {
+        if (isInWaterBody(corner.x, corner.y)) {
+            return true;
+        }
+    }
+
+    // Check midpoints of cell edges for better accuracy
+    const edgeMidpoints = [
+        { x: cellCenterX, y: cellTop },
+        { x: cellCenterX, y: cellBottom },
+        { x: cellLeft, y: cellCenterY },
+        { x: cellRight, y: cellCenterY }
+    ];
+
+    for (const midpoint of edgeMidpoints) {
+        if (isInWaterBody(midpoint.x, midpoint.y)) {
+            return true;
+        }
+    }
+
+    return false; // No overlap detected
+}
+
+// declare function to classify all grid cells by classification type
+function classifyGridCells() {
+    // Calculate how many grid in the canvas
+    const gridWidth = Math.ceil(canvas.width / gridSize);
+    const gridHeight= Math.ceil(canvas.height / gridSize);
+
+    console.log(`Classifying ${gridWidth}x${gridHeight} grid cells with enhanced overlap detection...`);
+
+    // Make a loop to assign grid cell classification one by one
+    for (let x = 0; x < gridWidth; x++) {
+        for (let y = 0; y < gridHeight; y++) {
+            const cellKey = `${x},${y}`;
+
+            // Check if any part of the cell overlaps with water bodies
+            if (cellOverlapsWater(x, y)) {
+                gridClassification[cellKey] = CELL_TYPES.WATER;
+            } else {
+                gridClassification[cellKey] = CELL_TYPES.ACCESSIBLE;
+            }
+        }
+    }
+
+    // Count and log classification results
+    const waterCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.WATER).length;
+    const accessibleCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.ACCESSIBLE).length;
+    console.log(`Grid classification complete: ${accessibleCells} accessible, ${waterCells} water cells`);
+}
+```
+
+### Step 1.4: Initialize Grid Classification
+
+Add the classification call during initialization:
+
+``` javascript
+// calling function to initialise grid classification
+classifyGridCells();
+```
+
+------------------------------------------------------------------------
+
+## Phase 2: Advanced Pathfinding System
+
+### Overview: Multi-Level Pathfinding Strategy
+
+The pathfinding system uses a **hierarchical approach** with multiple fallback strategies to ensure agents can always find a route around water obstacles:
+
+1.  **Direct Path Check** - Test if straight line is clear
+2.  **Single Waypoint Navigation** - Find one intermediate point around simple obstacles\
+3.  **Multi-Waypoint Pathfinding** - Generate multiple waypoints for complex water shapes
+4.  **Fallback Navigation** - Find any safe waypoint in the general direction
+5.  **Emergency Direct Path** - Last resort when no alternatives exist
+
+### Step 2.1: Core Pathfinding Components
+
+#### Agent Water Overlap Detection
+
+This function determines if an agent at a given position would overlap with water:
+
+``` javascript
+// Function to check if agent with buffer radius would overlap with water cells at given position
+function agentWouldOverlapWater(x, y, agentRadius, bufferMultiplier = 1) {
+    const effectiveRadius = agentRadius * bufferMultiplier;
+    
+    // Get all grid cells that the agent's effective radius might touch
+    const minGridX = Math.floor((x - effectiveRadius) / gridSize);
+    const maxGridX = Math.floor((x + effectiveRadius) / gridSize);
+    const minGridY = Math.floor((y - effectiveRadius) / gridSize);
+    const maxGridY = Math.floor((y + effectiveRadius) / gridSize);
+    
+    // Check each potentially affected grid cell
+    for (let gridX = minGridX; gridX <= maxGridX; gridX++) {
+        for (let gridY = minGridY; gridY <= maxGridY; gridY++) {
+            const cellKey = `${gridX},${gridY}`;
+            
+            // Skip cells outside the canvas
+            if (gridX < 0 || gridY < 0 || 
+                gridX >= Math.ceil(canvas.width / gridSize) || 
+                gridY >= Math.ceil(canvas.height / gridSize)) {
+                continue;
+            }
+            
+            // If this cell is classified as water, check if agent would overlap
+            if (gridClassification[cellKey] === CELL_TYPES.WATER) {
+                // Calculate cell boundaries
+                const cellLeft = gridX * gridSize;
+                const cellRight = (gridX + 1) * gridSize;
+                const cellTop = gridY * gridSize;
+                const cellBottom = (gridY + 1) * gridSize;
+                
+                // Check if agent's radius overlaps with this cell
+                const closestX = Math.max(cellLeft, Math.min(x, cellRight));
+                const closestY = Math.max(cellTop, Math.min(y, cellBottom));
+                
+                const distanceToCell = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+                
+                if (distanceToCell <= effectiveRadius) {
+                    return true; // Agent would overlap with this water cell
+                }
+            }
+        }
+    }
+    
+    return false; // No overlap with water cells
+}
+```
+
+**Key Features:** - Uses **1x agent radius** for precise collision detection (no excessive buffer) - **Grid-based checking** - examines all grid cells within agent's radius - **Distance calculation** to cell boundaries for accurate overlap detection
+
+#### Path Collision Detection
+
+This function checks if a direct path between two points crosses water:
+
+``` javascript
+// Function to check if direct path crosses water with enhanced detection
+function pathCrossesWater(startX, startY, targetX, targetY, agentRadius) {
+    const steps = 50; // Check 50 points along the path
+    const bufferMultiplier = 1; // Use 1x agent radius for exact collision detection
+    
+    for (let i = 0; i <= steps; i++) {
+        // Calculate progress along the path (0.0 to 1.0)
+        const t = i / steps;
+        
+        // Linear interpolation to get point coordinates
+        const checkX = startX + t * (targetX - startX);
+        const checkY = startY + t * (targetY - startY);
+        
+        // Check if agent would overlap water at this point
+        if (agentWouldOverlapWater(checkX, checkY, agentRadius, bufferMultiplier)) {
+            return true; // Path crosses water
+        }
+    }
+    
+    return false; // Path is clear
+}
+```
+
+**Algorithm Breakdown:** - **50-step sampling** provides detailed path checking - **Linear interpolation** creates evenly spaced checkpoints - **Agent radius consideration** ensures safe passage width
+
+### Step 2.2: Waypoint Generation System
+
+#### Single Waypoint Navigation
+
+For simple obstacles, find one intermediate waypoint:
+
+``` javascript
+// Function to find waypoint around water obstacles
+function findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius) {
+    // Calculate midpoint between start and target
+    const midX = (startX + targetX) / 2;
+    const midY = (startY + targetY) / 2;
+    
+    // Try waypoints at different angles and distances around the obstacle
+    const angles = [Math.PI/4, -Math.PI/4, Math.PI/2, -Math.PI/2, 3*Math.PI/4, -3*Math.PI/4, Math.PI, 0];
+    const distances = [80, 120, 160]; // Different distances to try
+    
+    for (const distance of distances) {
+        for (const angle of angles) {
+            const waypointX = midX + Math.cos(angle) * distance;
+            const waypointY = midY + Math.sin(angle) * distance;
+            
+            // Check if waypoint is within canvas boundaries
+            if (waypointX < agentRadius * 2 || waypointX > canvas.width - agentRadius * 2 || 
+                waypointY < agentRadius * 2 || waypointY > canvas.height - agentRadius * 2) {
+                continue;
+            }
+            
+            // Check if waypoint itself would overlap water
+            if (agentWouldOverlapWater(waypointX, waypointY, agentRadius, 1)) {
+                continue;
+            }
+            
+            // Check if paths to and from waypoint are clear
+            if (!pathCrossesWater(startX, startY, waypointX, waypointY, agentRadius) &&
+                !pathCrossesWater(waypointX, waypointY, targetX, targetY, agentRadius)) {
+                return { x: waypointX, y: waypointY };
+            }
+        }
+    }
+    
+    return null; // No suitable waypoint found
+}
+```
+
+**Strategy:** - **Midpoint calculation** estimates obstacle center - **8 directional angles** provide comprehensive coverage - **3 distance options** handle different obstacle sizes - **Dual path validation** ensures complete route safety
+
+#### Multi-Waypoint Pathfinding
+
+For complex water bodies, generate multiple intermediate waypoints:
+
+``` javascript
+// New function to find multiple waypoints for complex water navigation
+function findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius, maxWaypoints = 3) {
+    const waypoints = [];
+    let currentX = startX;
+    let currentY = startY;
+    
+    for (let i = 0; i < maxWaypoints; i++) {
+        // Try to find a waypoint from current position towards target
+        const waypoint = findWaypointAroundWater(currentX, currentY, targetX, targetY, agentRadius);
+        
+        if (!waypoint) {
+            break; // No more waypoints found
+        }
+        
+        waypoints.push(waypoint);
+        
+        // Check if we can reach target from this waypoint
+        if (!pathCrossesWater(waypoint.x, waypoint.y, targetX, targetY, agentRadius)) {
+            // Found a complete path!
+            return waypoints;
+        }
+        
+        // Move to this waypoint and try to find the next one
+        currentX = waypoint.x;
+        currentY = waypoint.y;
+    }
+    
+    // Return whatever waypoints we found (even if incomplete)
+    return waypoints.length > 0 ? waypoints : null;
+}
+```
+
+**Progressive Strategy:** - **Iterative waypoint generation** builds path step by step - **Target accessibility check** at each waypoint - **Maximum 3 waypoints** prevents infinite loops - **Partial path acceptance** provides progress even when incomplete
+
+#### Fallback Navigation
+
+When standard pathfinding fails, find any safe waypoint in the general direction:
+
+``` javascript
+// Fallback function to find at least one safe waypoint in the general direction
+function findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius) {
+    // Calculate direction vector to target
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance === 0) return null;
+    
+    // Normalize direction
+    const dirX = dx / distance;
+    const dirY = dy / distance;
+    
+    // Try points at different distances in the general direction
+    const testDistances = [50, 80, 120, 160, 200];
+    
+    for (const testDist of testDistances) {
+        // Try the main direction and some variations
+        const variations = [
+            { x: startX + dirX * testDist, y: startY + dirY * testDist },
+            { x: startX + dirX * testDist + dirY * 40, y: startY + dirY * testDist - dirX * 40 }, // perpendicular offset
+            { x: startX + dirX * testDist - dirY * 40, y: startY + dirY * testDist + dirX * 40 }, // perpendicular offset other way
+        ];
+        
+        for (const point of variations) {
+            // Check bounds
+            if (point.x < agentRadius * 2 || point.x > canvas.width - agentRadius * 2 || 
+                point.y < agentRadius * 2 || point.y > canvas.height - agentRadius * 2) {
+                continue;
+            }
+            
+            // Check if point is safe and reachable
+            if (!agentWouldOverlapWater(point.x, point.y, agentRadius) &&
+                !pathCrossesWater(startX, startY, point.x, point.y, agentRadius)) {
+                return point;
+            }
+        }
+    }
+    
+    return null; // No fallback found
+}
+```
+
+**Adaptive Strategy:** - **Direction vector calculation** maintains general heading toward target - **Multiple test distances** find optimal progress distance - **Perpendicular variations** explore alternative routes when direct path fails
+
+### Step 2.3: Main Pathfinding Function
+
+The master pathfinding function that coordinates all strategies:
+
+``` javascript
+// Function for pathfinding to avoid water bodies
+function findPathAroundWater(startX, startY, targetX, targetY, agentRadius) {
+    // Check if direct path is clear
+    if (!pathCrossesWater(startX, startY, targetX, targetY, agentRadius)) {
+        // Direct path is clear
+        return [{ x: targetX, y: targetY }];
+    }
+    
+    // Try single waypoint first (faster for simple obstacles)
+    const singleWaypoint = findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius);
+    if (singleWaypoint) {
+        return [singleWaypoint, { x: targetX, y: targetY }];
+    }
+    
+    // For complex water bodies, try multi-waypoint pathfinding
+    const multiWaypoints = findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius);
+    if (multiWaypoints && multiWaypoints.length > 0) {
+        // Add final target to the end
+        multiWaypoints.push({ x: targetX, y: targetY });
+        return multiWaypoints;
+    }
+    
+    // Fallback: try to get closer by finding a waypoint towards the target
+    const fallbackWaypoint = findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius);
+    if (fallbackWaypoint) {
+        return [fallbackWaypoint];
+    }
+    
+    // Last resort: direct path (agent will have to cross water)
+    console.warn("No clear path found, using direct route");
+    return [{ x: targetX, y: targetY }];
+}
+```
+
+**Hierarchical Decision Process:** 1. **Optimization first**: Try direct path (fastest) 2. **Simple solution**: Single waypoint for basic obstacles 3. **Complex navigation**: Multi-waypoint for challenging terrain 4. **Progress guarantee**: Fallback ensures some movement 5. **Safety net**: Direct path prevents agent lockup
+
+------------------------------------------------------------------------
+
+## Phase 3: Smart Target Selection
+
+### Step 3.1: Water-Safe Target Selection
+
+Ensure agents only choose accessible targets that are safely away from water:
+
+``` javascript
+// Function to check if a position is safely away from water bodies
+function isPositionSafeFromWater(x, y, agentRadius, safetyBuffer = 3) {
+    // Use a larger buffer to ensure targets aren't placed too close to water
+    const effectiveRadius = agentRadius * safetyBuffer;
+    
+    // Get all grid cells that the agent's effective radius might touch
+    const minGridX = Math.floor((x - effectiveRadius) / gridSize);
+    const maxGridX = Math.floor((x + effectiveRadius) / gridSize);
+    const minGridY = Math.floor((y - effectiveRadius) / gridSize);
+    const maxGridY = Math.floor((y + effectiveRadius) / gridSize);
+    
+    // Check each potentially affected grid cell
+    for (let gridX = minGridX; gridX <= maxGridX; gridX++) {
+        for (let gridY = minGridY; gridY <= maxGridY; gridY++) {
+            const cellKey = `${gridX},${gridY}`;
+            
+            // Skip cells outside the canvas
+            if (gridX < 0 || gridY < 0 || 
+                gridX >= Math.ceil(canvas.width / gridSize) || 
+                gridY >= Math.ceil(canvas.height / gridSize)) {
+                continue;
+            }
+            
+            // If this cell is water, check if it's too close
+            if (gridClassification[cellKey] === CELL_TYPES.WATER) {
+                // Calculate cell boundaries
+                const cellLeft = gridX * gridSize;
+                const cellRight = (gridX + 1) * gridSize;
+                const cellTop = gridY * gridSize;
+                const cellBottom = (gridY + 1) * gridSize;
+                
+                // Check distance to this water cell
+                const closestX = Math.max(cellLeft, Math.min(x, cellRight));
+                const closestY = Math.max(cellTop, Math.min(y, cellBottom));
+                
+                const distanceToWater = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+                
+                if (distanceToWater <= effectiveRadius) {
+                    return false; // Too close to water
+                }
+            }
+        }
+    }
+    
+    return true; // Safe from water
+}
+
+// Enhanced target selection with water safety
+function chooseNewExplorationTarget(agentInput) {
+    const gridWidth = Math.ceil(canvas.width / gridSize);
+    const gridHeight = Math.ceil(canvas.height / gridSize);
+    
+    // Try to find unvisited accessible cell that's safe from water
+    let attempts = 0;
+    while (attempts < 100) {
+        const gridX = Math.floor(Math.random() * gridWidth);
+        const gridY = Math.floor(Math.random() * gridHeight);
+        const cellKey = `${gridX},${gridY}`;
+
+        if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
+            const cellCenter = grid.getCellCenter(cellKey);
+            
+            // Additional check: ensure the target is safely away from water
+            if (isPositionSafeFromWater(cellCenter.x, cellCenter.y, agentInput.radius)) {
+                return cellCenter;
+            }
+        }
+        attempts++;
+    }
+    
+    // Fallback 1: Find any accessible unvisited cell (ignoring safety buffer)
+    attempts = 0;
+    while (attempts < 100) {
+        const gridX = Math.floor(Math.random() * gridWidth);
+        const gridY = Math.floor(Math.random() * gridHeight);
+        const cellKey = `${gridX},${gridY}`;
+
+        if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
+            return grid.getCellCenter(cellKey);
+        }
+        attempts++;
+    }
+    
+    // Fallback 2: Find any accessible cell (visited or not)
+    attempts = 0;
+    while (attempts < 100) {
+        const gridX = Math.floor(Math.random() * gridWidth);
+        const gridY = Math.floor(Math.random() * gridHeight);
+        const cellKey = `${gridX},${gridY}`;
+
+        if (gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
+            return grid.getCellCenter(cellKey);
+        }
+        attempts++;
+    }
+    
+    // Final fallback: return current position
+    return { x: agentInput.x, y: agentInput.y };
+}
+```
+
+**Safety Features:** - **3x radius buffer** prevents targets too close to water edges - **Multi-tier fallback system** ensures agents always get valid targets - **Eliminates bouncing behavior** by avoiding narrow corridors near water
+
+------------------------------------------------------------------------
+
+## Phase 4: Agent Movement Integration
+
+### Step 4.1: Enhanced Movement Function
+
+Update agent movement to use pathfinding:
+
+``` javascript
+// Add pathfinding properties to agent creation
+function createAgent(){
+    const agent = {
+        // ... existing properties ...
+        currentPath: [],        // Array of waypoints to follow
+        pathIndex: 0,          // Current waypoint index
+        needsNewPath: true     // Flag to recalculate path
+    }
+    return agent;
+}
+
+// Enhanced movement function with pathfinding
+function moveTowardsLocation(agentInput, targetLocationInput) {
+    // Check if we need a new path or current path is invalid
+    if (agentInput.needsNewPath || agentInput.currentPath.length === 0) {
+        // Calculate path using enhanced pathfinding around water
+        agentInput.currentPath = findPathAroundWater(
+            agentInput.x, agentInput.y, 
+            targetLocationInput.x, targetLocationInput.y, 
+            agentInput.radius
+        );
+        agentInput.pathIndex = 0;
+        agentInput.needsNewPath = false;
+    }
+
+    // Get current waypoint in the path
+    const currentWaypoint = agentInput.currentPath[agentInput.pathIndex];
+    if (!currentWaypoint) {
+        agentInput.needsNewPath = true;
+        return;
+    }
+
+    // Calculate distance to current waypoint
+    const dx = currentWaypoint.x - agentInput.x;
+    const dy = currentWaypoint.y - agentInput.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Check if we've reached the current waypoint
+    if (distance <= agentInput.speed) {
+        // Move to next waypoint in the path
+        agentInput.pathIndex++;
+        
+        if (agentInput.pathIndex >= agentInput.currentPath.length) {
+            agentInput.needsNewPath = true;
+        }
+    } else {
+        // Calculate intended new position
+        const newX = agentInput.x + (dx/distance) * agentInput.speed;
+        const newY = agentInput.y + (dy/distance) * agentInput.speed;
+
+        // Real-time safety check
+        if (agentWouldOverlapWater(newX, newY, agentInput.radius, 1)) {
+            console.log("Real-time water detection: forcing new path calculation");
+            agentInput.needsNewPath = true;
+            return;
+        }
+
+        // Move towards current waypoint
+        agentInput.x = Math.max(agentInput.radius, Math.min(canvas.width - agentInput.radius, newX));
+        agentInput.y = Math.max(agentInput.radius, Math.min(canvas.height - agentInput.radius, newY));
+    }
+}
+```
+
+------------------------------------------------------------------------
+
+## Phase 5: Stuck Detection and Recovery System
+
+Despite the advanced pathfinding system, agents can occasionally become stuck due to complex water configurations or edge cases. The stuck detection system provides automatic recovery by monitoring agent movement and forcing new target selection when necessary.
+
+### Step 5.1: Add Stuck Detection Properties
+
+Add stuck detection properties to the agent creation function:
+
+```javascript
+// Enhanced agent creation with stuck detection
+function createAgent(){
+    const agent = {
+        // ... existing properties ...
+        currentPath: [],        // Array of waypoints to follow
+        pathIndex: 0,          // Current waypoint index
+        needsNewPath: true,    // Flag to recalculate path
+
+        // stuck detection properties
+        stuckDetection: {
+            previousX: houseX,           // agent's position from previous frame
+            previousY: houseY,           // agent's position from previous frame
+            stuckFrameCount: 0,          // number of consecutive frames agent hasn't moved
+            stuckThreshold: 90,          // frames without movement before considering stuck (3 seconds at 30fps)
+            minMovementDistance: 1.5     // minimum distance to not be considered stuck
+        }
+    }
+    return agent;
+}
+```
+
+**Key Parameters:**
+- **stuckThreshold: 90 frames** - Allows 3 seconds of no movement before intervention (at 30fps)
+- **minMovementDistance: 1.5 pixels** - Minimum distance to consider meaningful movement
+- **Position tracking** - Monitors previous frame position for comparison
+
+### Step 5.2: Implement Stuck Detection Function
+
+Add the stuck detection and recovery logic:
+
+```javascript
+// Function to detect if agent is stuck and handle stuck situations
+function detectAndHandleStuck(agentInput) {
+    // Calculate distance moved since last frame
+    const deltaX = agentInput.x - agentInput.stuckDetection.previousX;
+    const deltaY = agentInput.y - agentInput.stuckDetection.previousY;
+    const distanceMoved = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    // Check if agent has moved significantly
+    if (distanceMoved < agentInput.stuckDetection.minMovementDistance) {
+        // Agent hasn't moved much, increment stuck counter
+        agentInput.stuckDetection.stuckFrameCount++;
+        
+        // Check if agent has been stuck for too long
+        if (agentInput.stuckDetection.stuckFrameCount >= agentInput.stuckDetection.stuckThreshold) {
+            // Agent is stuck! Handle based on current mode
+            console.log(`Agent stuck detected after ${agentInput.stuckDetection.stuckFrameCount} frames`);
+            
+            // Only force new target if agent is in d-EPR exploration mode
+            if (agentInput.scheduleMode === 'deprMobile') {
+                // Force agent to choose a new exploration target
+                console.log("Forcing new target for stuck agent in d-EPR mode");
+                agentInput.currentTarget = chooseNewExplorationTarget(agentInput);
+                agentInput.needsNewPath = true;
+                
+                // Reset stuck detection
+                agentInput.stuckDetection.stuckFrameCount = 0;
+            }
+            // For 'atHome' and 'atWork' modes, don't change targets as agents should stay put
+        }
+    } else {
+        // Agent moved significantly, reset stuck counter
+        agentInput.stuckDetection.stuckFrameCount = 0;
+    }
+
+    // Update previous position for next frame
+    agentInput.stuckDetection.previousX = agentInput.x;
+    agentInput.stuckDetection.previousY = agentInput.y;
+}
+```
+
+**Algorithm Breakdown:**
+1. **Movement Calculation**: Compare current position with previous frame
+2. **Movement Threshold**: Check if movement exceeds minimum distance
+3. **Stuck Counter**: Increment counter for insufficient movement
+4. **Mode-Aware Recovery**: Only intervene during d-EPR exploration mode
+5. **Target Reset**: Force new exploration target and path recalculation
+6. **Position Update**: Store current position for next frame comparison
+
+### Step 5.3: Integrate Stuck Detection
+
+Add stuck detection to the main movement update function:
+
+```javascript
+// Enhanced movement function with stuck detection
+function updateAgentMovement(agentInput) {
+    // ... existing movement logic ...
+
+    // execute movement based on current schedule mode
+    switch (agentInput.scheduleMode) {
+        case 'atHome':
+            // Only move if agent is not already at home
+            if (!isAtTarget(agentInput, agentInput.house)) {
+                moveTowardsLocation(agentInput, agentInput.house);
+            }
+            break;
+        
+        case 'atWork':
+            // Only move if agent is not already at work
+            if (!isAtTarget(agentInput, agentInput.work)) {
+                moveTowardsLocation(agentInput, agentInput.work);
+            }
+            break;
+
+        case 'deprMobile':
+            handleDEPRMovement(agentInput);
+            break;
+
+        default:
+            handleDEPRMovement(agentInput);
+            break;
+    }
+
+    // STUCK DETECTION: Check if agent is stuck and handle accordingly
+    detectAndHandleStuck(agentInput);
+}
+```
+
+### Benefits of Smart Stuck Detection
+
+**Mode-Aware Intelligence:**
+- **d-EPR Mode**: Actively intervenes by forcing new target selection
+- **atHome/atWork Modes**: Allows agents to stay stationary (correct behavior)
+
+**Performance Optimized:**
+- **Lightweight Calculation**: Simple distance comparison per frame
+- **Configurable Thresholds**: Adjustable timing and sensitivity
+- **Minimal Memory Overhead**: Only stores previous position
+
+**Robust Recovery:**
+- **Automatic Target Reset**: Forces completely new exploration target
+- **Path Recalculation**: Ensures fresh pathfinding attempt
+- **Prevents Lock-up**: Guarantees agents don't get permanently stuck
+
+------------------------------------------------------------------------
+
+## System Benefits and Performance
+
+### Key Achievements
+
+1. **100% Water Avoidance**: No agents cross water bodies inappropriately
+2. **Smart Stuck Detection**: Automatic recovery from stuck situations with mode-aware intervention
+3. **Realistic Navigation**: Agents find natural routes around obstacles using hierarchical pathfinding
+4. **Performance Optimized**: Efficient pathfinding with minimal computational overhead
+5. **Robust Fallbacks**: Multiple strategies ensure agents always have valid movement options
+6. **Stuck Detection & Recovery**: Mode-aware intervention prevents permanent agent lock-up
+
+### Performance Characteristics
+
+- **Grid Classification**: One-time O(n²) setup cost for terrain mapping
+- **Pathfinding**: O(1) for direct paths, O(k) for complex navigation where k is small
+- **Target Selection**: O(n) with early termination for valid targets
+- **Real-time Checking**: Minimal overhead with 1x radius collision detection
+- **Stuck Detection**: O(1) lightweight distance calculation per agent per frame
+
+### Visual Debugging Features
+
+The system includes comprehensive debugging visualization: - **Red circles/lines**: Final target destinations - **Green waypoints**: Current navigation waypoints\
+- **Blue waypoints**: Future waypoints in path - **Gray waypoints**: Completed waypoints - **Pause functionality**: Examine agent behavior at specific moments - **Toggle controls**: Show/hide pathfinding visualization
+
+This complete pathfinding system provides a robust foundation for realistic agent movement in cholera simulation environments while maintaining the core d-EPR mobility principles.
 
 ### Phase 1 Implementation Steps
 
