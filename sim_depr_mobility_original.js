@@ -125,73 +125,25 @@
         return false;                              
     }
 
-    // Function to check if any part of a grid cell overlaps with water bodies
-    // this function checks the center, four corner, and midpoint of the edge for each cell if it is in the water
-    function cellOverlapsWater(gridX, gridY) {
-        // Calculate cell boundaries in canvas coordinates
-        const cellLeft = gridX * gridSize;
-        const cellRight = (gridX + 1) * gridSize;
-        const cellTop = gridY * gridSize;
-        const cellBottom = (gridY + 1) * gridSize;
-
-        // Check the center point first (most common case)
-        const cellCenterX = cellLeft + gridSize / 2;
-        const cellCenterY = cellTop + gridSize / 2;
-        if (isInWaterBody(cellCenterX, cellCenterY)) {
-            return true;
-        }
-
-        // Check all four corner points of the grid cell
-        const corners = [
-            { x: cellLeft, y: cellTop },       // Top-left corner
-            { x: cellRight, y: cellTop },      // Top-right corner
-            { x: cellLeft, y: cellBottom },    // Bottom-left corner
-            { x: cellRight, y: cellBottom }    // Bottom-right corner
-        ];
-
-        for (const corner of corners) {
-            if (isInWaterBody(corner.x, corner.y)) {
-                return true; // If any corner is in water, the cell overlaps with water
-            }
-        }
-
-        // Check midpoints of cell edges for better accuracy
-        const edgeMidpoints = [
-            { x: cellCenterX, y: cellTop },    // Top edge midpoint
-            { x: cellCenterX, y: cellBottom }, // Bottom edge midpoint
-            { x: cellLeft, y: cellCenterY },   // Left edge midpoint
-            { x: cellRight, y: cellCenterY }   // Right edge midpoint
-        ];
-
-        for (const midpoint of edgeMidpoints) {
-            if (isInWaterBody(midpoint.x, midpoint.y)) {
-                return true; // If any edge midpoint is in water, the cell overlaps with water
-            }
-        }
-
-        return false; // No overlap detected
-    }
-
     // declare function to classify all grid cells by classification type
     function classifyGridCells() {
         // Calculate how many grid in the canvas
         const gridWidth = Math.ceil(canvas.width / gridSize); // calculate how many grid cells fit across (columns)
         const gridHeight= Math.ceil(canvas.height / gridSize); // calculate how many grid cells frit down (row)
 
-        console.log(`Classifying ${gridWidth}x${gridHeight} grid cells with enhanced overlap detection...`);
-
-        // Make a loop to assign grid cell classification one by one
+        // Make a loop to assign grid cell calssification one by one
         for (let x = 0; x < gridWidth; x++) {
             for (let y = 0; y < gridHeight; y++) {
                 const cellKey = `${x},${y}`;
+                const cellCenter = grid.getCellCenter(cellKey);
 
-                // Check if any part of the cell overlaps with water bodies
-                // This includes center point, corners, and edge midpoints
-                if (cellOverlapsWater(x, y)) {
-                    // if any part of the cell overlaps with water, classify as water
+                // check if the cell is overlap with the water bodies
+                // we will add sclassification if the cell center is inside the waterbody or not
+                if (isInWaterBody(cellCenter.x, cellCenter.y)) {
+                    // if the `isInWaterBody` returns true, we classify the cell as water
                     gridClassification[cellKey] = CELL_TYPES.WATER;
                 } else {
-                    // if no part of the cell overlaps with water, classify as accessible
+                    // if the `isInWaterBody` returns false, we classify the cell as accessible
                     gridClassification[cellKey] = CELL_TYPES.ACCESSIBLE;
                 }
             }
@@ -201,7 +153,6 @@
         const waterCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.WATER).length;
         const accessibleCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.ACCESSIBLE).length;
         console.log(`Grid classification complete: ${accessibleCells} accessible, ${waterCells} water cells`);
-        console.log(`Enhanced overlap detection: checking center + 4 corners + 4 edge midpoints per cell`);
     }
 
     
@@ -211,7 +162,7 @@
         { 
             x: canvas.width * 0.5,         // define x-center point
             y: canvas.height * 0.3,          // define y-center point
-            radius: 40     // radius of the waterbody
+            radius: 20      // radius of the waterbody
         }
     ];
 
@@ -341,7 +292,12 @@
             deprState: {
                 savedTarget: null,      // Save d-epr target when entering home/work mode
                 wasExploring: false     // remember if agemt was exploring 
-            }
+            },
+
+            // pathfinding properties
+            currentPath: [],    // array of waypoint the agent should follow
+            pathIndex: 0,       // current waypoint index
+            needsNewPath: true, // flag to recalculate path 
         }
 
         // mark home location as visited, since the agent starts at home
@@ -385,15 +341,28 @@
             const gridY = Math.floor(Math.random() * gridHeight); // random y coordinate
             const cellKey = `${gridX},${gridY}`; // create cell key
 
-            // check if the cell never been visited
-            if (!agentInput.visitedCells[cellKey]) {
+            // check if the cell never been visited and only select accessible cells
+            if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
                 // return the center of the cell as the new target
                 return grid.getCellCenter(cellKey);
             }
             attempts++;
         }
 
-        // if all cells are visited, return random cell
+        // Fallback: find any accessible cell (visited or unvisited)
+        attempts = 0; 
+        while (attempts < 100) {
+            const gridX = Math.floor(Math.random() * gridWidth);
+            const gridY = Math.floor(Math.random() * gridHeight);
+            const cellKey = `${gridX},${gridY}`;
+
+            if (gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
+                return grid.getCellCenter(cellKey);
+            }
+            attempts++;
+        }
+
+        // if all cells are visited, or could not find accessible cell, return random cell
         const gridX = Math.floor(Math.random() * gridWidth);
         const gridY = Math.floor(Math.random() * gridHeight);
         return grid.getCellCenter(`${gridX},${gridY}`);
@@ -401,12 +370,13 @@
 
     // function to choose return target
     function chooseReturnTarget(agentInput) {
-        // Get all cells that have been visited by the agent
-        const visitedCells = Object.keys(agentInput.visitedCells);
+        // Get all accessible cell that has been visited by the agent
+        const visitedAccessibleCells = Object.keys(agentInput.visitedCells).filter(cellKey => gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE);
 
-        // if no visited locations, return home
-        if (visitedCells.length === 0) {
-            return { x: agentInput.house.x, y: agentInput.house.y };
+        // if no visited locations, return current position
+        // this case should not happen in normal operation, but it's a safety check
+        if (visitedAccessibleCells.length === 0) {
+            return { x: agentInput.house.x, y: agentInput.house.y }; // return current position
         }
 
         // calculate total number of visits to all cells
@@ -416,7 +386,7 @@
         let randomValue = Math.floor(Math.random() * totalVisits);
 
         // go through visited cells to find the target cell by subtracting each count until you go below zero
-        for (const cellKey of visitedCells) {
+        for (const cellKey of visitedAccessibleCells) {
             randomValue -= agentInput.visitedCells[cellKey]; // subtract the visit count
             if (randomValue < 0) {
                 // return the center of the cell as the target
@@ -429,22 +399,119 @@
         return { x: agentInput.house.x, y: agentInput.house.y };
     }
 
+    // declare function to check if a direct path crosses water or not
+    function pathCrossesWater(startInputX, startInputY, targetInputX, targetInputY) {
+        const steps = 10;       // number of points to check along the path
 
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps; 
+            const checkX = startInputX + t * (targetInputX - startInputX);
+            const checkY = startInputY + t * (targetInputY - startInputY);
+
+            if (isInWaterBody(checkX, checkY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Function to find a waypointaround waterbodies
+    function findWaypointAroundWater(startInputX, startInputY, targetInputX, targetInputY) {
+        // Find the center of water bodies between start and target
+        const midX = (startInputX + targetInputX) / 2;
+        const midY = (startInputY + targetInputY) / 2;
+
+        // Try waypoints at different angles around the obstacle
+        const angles = [Math.PI/4, -Math.PI/4, Math.PI/2, -Math.PI/2, 3*Math.PI/4, -3*Math.PI/4];
+        const wayPointDistance = 60; // distance (in pixels) to place waypoints from obstacle center
+
+        for (const angle of angles) {
+            // declare new way point
+            const waypointX = midX + Math.cos(angle) * wayPointDistance;
+            const waypointY = midY + Math.sin(angle) * wayPointDistance;
+
+            // cherck if waypoint is within the canvas boundaries
+            if (waypointX < 0 || waypointX > canvas.width || waypointY < 0 || waypointY > canvas.height) {
+                continue; // Skip this waypoint if it's outside canvas
+            }
+
+            // check if waypoint is accessible and paths to/from it are clear
+            if (!isInWaterBody(waypointX, waypointY) && !pathCrossesWater(startInputX, startInputY, waypointX, waypointY) && !pathCrossesWater(waypointX, waypointY, targetInputX, targetInputY)) {
+                return { x: waypointX, y: waypointY };
+            }
+        }
+
+        // if no suitable waypoint
+        return null;
+    }
+
+
+    // declare function for pathfinding to avoid water bodies
+    function findPathAroundWater(startInputX, startInputY, targetInputX, targetInputY) {
+        // check if direct path does cross water or not
+        // `pathCrossesWater` is false means the path is clear from waterbody
+        if (!pathCrossesWater(startInputX, startInputY, targetInputX, targetInputY)) {
+            //direct path is clear
+            return [{ x: targetInputX, y: targetInputY}];
+        }
+
+        // find intermediate waypoint to go around water
+        const waypoint = findWaypointAroundWater(startInputX, startInputY, targetInputX, targetInputY);
+
+
+        if (waypoint) {
+            // return path with waypoint and target point
+            return [waypoint, { x: targetInputX, y: targetInputY }];
+        }
+
+        // Fallback: direct Path (incase it fail)
+        return [{ x: targetInputX, y: targetInputY}];
+    }
 
     // function to move agent to specific location (like home or work)
     function moveTowardsLocation(agentInput, targetLocationInput) {
-        // Calculate distance between current position and target location
-        const dx = targetLocationInput.x - agentInput.x;
-        const dy = targetLocationInput.y - agentInput.y;
+        // check if we need a new path or current path is in valid
+        // This step is to check if the current part is crossing the waterbody or not, if it is, it will return with array of waypoints to avoid waterbody
+        if (agentInput.needsNewPath || agentInput.currentPath.length === 0) {
+            // Calculate path  to check wayfinding around the water
+            agentInput.currentPath = findPathAroundWater(
+                agentInput.x, agentInput.y, targetLocationInput.x, targetLocationInput.y
+            );
+            agentInput.pathIndex = 0;               // to start the path index from the beginning (index 0)
+            agentInput.needsNewPath = false;        // to avoid generating new path
+        }
+
+        // Get current waypoint to gets the next destination point in the path sequence.
+        const currentWayPoint = agentInput.currentPath[agentInput.pathIndex];
+        // check if no currentWayPoint, meaning the path is completed
+        if (!currentWayPoint) {
+            // set that agent needs a new path
+            agentInput.needsNewPath = true;
+            return;
+        }
+
+        // Calculate distance between current position with the target location
+        const dx = currentWayPoint.x - agentInput.x;
+        const dy = currentWayPoint.y - agentInput.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Only move if not already at target
-        if (distance > agentInput.speed) {
-            // Calculate new position
+        // check if agent have reached the waypoint
+        if (distance <= agentInput.speed) {
+            // reached current waypoint, move to the next waypoint in the path or sequence
+            agentInput.pathIndex++;
+
+            // If we've reached the end of the path, mark for new path calculation
+            if (agentInput.pathIndex >= agentInput.currentPath.length) {
+                agentInput.needsNewPath = true;
+            }
+        } else {
+            // else - meaning the agent is not in the target waypoint yet
+            // move towards current way point
+            // calculate new position
             const newX = agentInput.x + (dx/distance) * agentInput.speed;
             const newY = agentInput.y + (dy/distance) * agentInput.speed;
 
-            // Add boundaries to prevent agent from going off-canvas
+            //add boundaries to present agent from going off-canvas
             agentInput.x = Math.max(agentInput.radius, Math.min(canvas.width - agentInput.radius, newX));
             agentInput.y = Math.max(agentInput.radius, Math.min(canvas.height - agentInput.radius, newY));
         }
@@ -625,6 +692,7 @@
         if (!agentInput.currentTarget && agentInput.deprState.savedTarget) {
             agentInput.currentTarget = agentInput.deprState.savedTarget;
             agentInput.deprState.savedTarget = null;                            // clear the saved target again
+            agentInput.needsNewPath = true;                                         
         }
 
         // if agent has no target or has reached the current target, choose a new target
@@ -640,6 +708,7 @@
                 // meaning RETURN: choose a return target
                 agentInput.currentTarget = chooseReturnTarget(agentInput);
             }
+            agentInput.needsNewPath = true;     // to make agent calculate new path
         }
 
         // Move towards the current target

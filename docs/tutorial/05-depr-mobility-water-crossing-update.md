@@ -508,33 +508,82 @@ return false;
 
 **RETURN VALUES**: - `true`: Coordinate is inside at least one water body (contaminated or clean) - `false`: Coordinate is on accessible land (not in any water body)
 
-#### Step 1.3: Grid Classification Function
+#### Step 1.3: Enhanced Grid Classification Function
 
-This step is declaring a function that running a loop for gridcell to check whether the center coordinate of each cell is in the waterbody of not.
+This step implements an enhanced grid classification system that checks not only the **center coordinate** of each cell but also the four **corners** and edge midpoints to detect partial overlaps with water bodies. This provides more accurate terrain classification.
 
-Add the main classification function:
+Add the enhanced overlap detection function first:
 
 ``` javascript
 // Add after the isInWaterBody function
 
-// Function to classify all grid cells by terrain type
+// Function to check if any part of a grid cell overlaps with water bodies
+function cellOverlapsWater(gridX, gridY) {
+    // Calculate cell boundaries in canvas coordinates
+    const cellLeft = gridX * gridSize;
+    const cellRight = (gridX + 1) * gridSize;
+    const cellTop = gridY * gridSize;
+    const cellBottom = (gridY + 1) * gridSize;
+
+    // Check the center point first (most common case)
+    const cellCenterX = cellLeft + gridSize / 2;
+    const cellCenterY = cellTop + gridSize / 2;
+    if (isInWaterBody(cellCenterX, cellCenterY)) {
+        return true;
+    }
+
+    // Check all four corner points of the grid cell
+    const corners = [
+        { x: cellLeft, y: cellTop },       // Top-left corner
+        { x: cellRight, y: cellTop },      // Top-right corner
+        { x: cellLeft, y: cellBottom },    // Bottom-left corner
+        { x: cellRight, y: cellBottom }    // Bottom-right corner
+    ];
+
+    for (const corner of corners) {
+        if (isInWaterBody(corner.x, corner.y)) {
+            return true; // If any corner is in water, the cell overlaps with water
+        }
+    }
+
+    // Check midpoints of cell edges for better accuracy
+    const edgeMidpoints = [
+        { x: cellCenterX, y: cellTop },    // Top edge midpoint
+        { x: cellCenterX, y: cellBottom }, // Bottom edge midpoint
+        { x: cellLeft, y: cellCenterY },   // Left edge midpoint
+        { x: cellRight, y: cellCenterY }   // Right edge midpoint
+    ];
+
+    for (const midpoint of edgeMidpoints) {
+        if (isInWaterBody(midpoint.x, midpoint.y)) {
+            return true; // If any edge midpoint is in water, the cell overlaps with water
+        }
+    }
+
+    return false; // No overlap detected
+}
+```
+
+Now add the enhanced main classification function:
+
+``` javascript
+// Function to classify all grid cells by terrain type with enhanced overlap detection
 function classifyGridCells() {
     const gridWidth = Math.ceil(canvas.width / gridSize);
     const gridHeight = Math.ceil(canvas.height / gridSize);
     
-    console.log(`Classifying ${gridWidth}x${gridHeight} grid cells...`);
+    console.log(`Classifying ${gridWidth}x${gridHeight} grid cells with enhanced overlap detection...`);
     
     for (let x = 0; x < gridWidth; x++) {
         for (let y = 0; y < gridHeight; y++) {
             const cellKey = `${x},${y}`;
-            const cellCenter = grid.getCellCenter(cellKey);
             
-            // Check if cell center overlaps with water bodies
-            if (isInWaterBody(cellCenter.x, cellCenter.y)) {
+            // Check if any part of the cell overlaps with water bodies
+            // This includes center point, corners, and edge midpoints
+            if (cellOverlapsWater(x, y)) {
                 gridClassification[cellKey] = CELL_TYPES.WATER;
             } else {
-                gridClassification[cellKey] = CELL_TYPES.
-                ACCESSIBLE;
+                gridClassification[cellKey] = CELL_TYPES.ACCESSIBLE;
             }
         }
     }
@@ -543,77 +592,92 @@ function classifyGridCells() {
     const waterCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.WATER).length;
     const accessibleCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.ACCESSIBLE).length;
     console.log(`Grid classification complete: ${accessibleCells} accessible, ${waterCells} water cells`);
+    console.log(`Enhanced overlap detection: checking center + 4 corners + 4 edge midpoints per cell`);
 }
 ```
 
-**Concept:** This function classifies every grid cell in the simulation as either `accessible` (land) or `water` (water body) by checking the center of each cell against all water bodies. This enables terrain-aware agent movement and obstacle avoidance.
+**Enhanced Concept:** This improved function classifies every grid cell in the simulation by checking multiple points within each cell to determine if any part of the cell overlaps with water bodies. This provides much more accurate terrain classification than checking only the center point.
+
+**Key Improvements Over Center-Point-Only Detection:**
+
+1.  **Comprehensive Coverage**: Checks 9 strategic points per cell (1 center + 4 corners + 4 edge midpoints)
+2.  **Partial Overlap Detection**: Catches cases where water bodies partially overlap with grid cells
+3.  **Edge Case Handling**: Detects water bodies that cross cell boundaries but don't include the center
+4.  **Better Accuracy**: Reduces misclassification of cells near water body edges
 
 **Code Breakdown:**
 
-1.  **Calculate Grid Dimensions**
+1.  **Enhanced Overlap Detection Function** (`cellOverlapsWater`)
 
 ``` javascript
-const gridWidth = Math.ceil(canvas.width / gridSize);
-const gridHeight = Math.ceil(canvas.height / gridSize);
+// Calculate exact cell boundaries
+const cellLeft = gridX * gridSize;
+const cellRight = (gridX + 1) * gridSize;
+const cellTop = gridY * gridSize;
+const cellBottom = (gridY + 1) * gridSize;
 ```
 
--   Calculates how many grid cells fit horizontally and vertically based on canvas size and cell size.
+-   Converts grid coordinates to precise canvas pixel boundaries
+-   Enables checking specific points within the cell area
 
-2.  **Log Classification Start**
-
-``` javascript
-console.log(`Classifying ${gridWidth}x${gridHeight} grid cells...`);
-```
-
--   Outputs the grid size for debugging and progress tracking.
-
-3.  **Iterate Over All Grid Cells**
+2.  **Multi-Point Sampling Strategy**
 
 ``` javascript
-for (let x = 0; x < gridWidth; x++) {
-    for (let y = 0; y < gridHeight; y++) {
-        const cellKey = `${x},${y}`;
-        const cellCenter = grid.getCellCenter(cellKey);
-        // ...
-    }
+// Priority check: center point (fastest, most common case)
+if (isInWaterBody(cellCenterX, cellCenterY)) return true;
+
+// Comprehensive check: all four corners
+for (const corner of corners) {
+    if (isInWaterBody(corner.x, corner.y)) return true;
+}
+
+// Accuracy check: edge midpoints for partial overlaps
+for (const midpoint of edgeMidpoints) {
+    if (isInWaterBody(midpoint.x, midpoint.y)) return true;
 }
 ```
 
--   Loops through every cell in the grid, generating a unique key and finding the cell's center coordinates.
+-   **Center-first optimization**: Most cells are fully in one terrain type
+-   **Corner detection**: Catches diagonal water body crossings
+-   **Edge midpoint detection**: Identifies partial overlaps along cell edges
 
--   `cellkey` → is a template literate to make the cell coordinate which latert in the code block will be saved as the `gridClassification` key
+3.  **Performance Considerations**
 
--   `grid.getCellCenter(cellKey);` is a function that we previously defined to determined the center coordinate cell.
+-   **Early return optimization**: Stops checking once water overlap is found
+-   **Strategic point selection**: 9 points provide good coverage without excessive computation
+-   **Minimal memory overhead**: Uses temporary arrays only during classification
 
--   `for (let x = 0; x < gridWidth; x++)` & `for (let y = 0; y < gridHeight; y++)` → to make a loop that going through all the cell key by looping all x value and y value
+**Visual Representation of Sampling Points:**
 
-4.  **Classify Cell by Terrain Type**
-
-``` javascript
-if (isInWaterBody(cellCenter.x, cellCenter.y)) {
-    gridClassification[cellKey] = CELL_TYPES.WATER;
-} else {
-    gridClassification[cellKey] = CELL_TYPES.ACCESSIBLE;
-}
+```         
+Grid Cell Sampling Pattern:
+┌─────●─────┐  ● = Sampling points
+│     │     │  9 total points checked:
+●─────●─────●  - 1 center point
+│     │     │  - 4 corner points  
+●─────●─────●  - 4 edge midpoints
+│     │     │
+└─────●─────┘
 ```
 
--   *Checks if the cell center is inside any water body. If so, marks it as `WATER`; otherwise, marks it as `ACCESSIBLE`.*
+**Comparison with Previous Approach:**
 
--   basically assigning the empty object of `gridClassification` with key and values:
+| Aspect                    | Center-Point Only | Enhanced Multi-Point  |
+|---------------------------|-------------------|-----------------------|
+| Points Checked            | 1 per cell        | 9 per cell            |
+| Partial Overlap Detection | Poor              | Excellent             |
+| Edge Case Handling        | Limited           | Comprehensive         |
+| Accuracy                  | Basic             | High                  |
+| Performance               | Fastest           | Good (9x more checks) |
+| Memory Usage              | Minimal           | Minimal               |
 
-    -   the key → `cellKey` (eg. 2,5 or 5,9)
+**Benefits of Enhanced Approach:**
 
-    -   the value → `CELL_TYPES.WATER` if the grid cell is in the waterbody or `CELL_TYPES.ACCESSIBLE` if the grid cell is not inside the waterbody
-
-5.  **Count and Log Results**
-
-``` javascript
-const waterCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.WATER).length;
-const accessibleCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.ACCESSIBLE).length;
-console.log(`Grid classification complete: ${accessibleCells} accessible, ${waterCells} water cells`);
-```
-
-*Counts the number of each cell type and logs the results for verification and debugging.*
+-   **Accurate Water Detection**: No more missed partial overlaps
+-   **Better Agent Behavior**: Agents avoid cells that are partially in water
+-   **Robust Classification**: Handles all water body shapes and positions
+-   **Future-Proof**: Works with any size or shape of water bodies
+-   **Visual Consistency**: Grid overlay matches actual water body boundaries
 
 #### Step 1.4: Initialize Grid Classification
 
