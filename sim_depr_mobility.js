@@ -912,7 +912,7 @@
         // Draw agent trails and paths (if enabled)
         if (showAgentPaths) {
             agents.forEach(agent => {
-                // drawAgentTrail(agent);
+                drawAgentTrail(agent);
                 // drawAgentPath(agent); // Draw pathfinding visualization - COMMENTED OUT FOR PRODUCTION
             });
         }
@@ -1069,7 +1069,6 @@
 
     // DEBUG: Draw agent path and targets for pathfinding visualization
     // COMMENTED OUT FOR PRODUCTION - Remove comments to enable debug visualization
-    /*
     function drawAgentPath(agent) {
         // Draw current target (final destination)
         if (agent.currentTarget) {
@@ -1119,7 +1118,6 @@
             ctx.stroke();
         }
     }
-    */
 
     // Function to handle d-EPR movement with pathfinding
     function handleDEPRMovement(agentInput) {

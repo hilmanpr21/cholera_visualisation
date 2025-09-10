@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Hydration Test</title>
+    <style>
+        :root {
+            --susceptible-color: #4285f4;
+            --exposed-color: #ff9800;
+            --infected-color: #f44336;
+            --recovered-color: #4caf50;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            display: block;
+            margin: 10px 0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        .info {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Hydration Logic Test</h1>
+    
+    <div class="info">
+        <h3>Visual Indicators:</h3>
+        <ul>
+            <li><strong>White dot</strong> in center = Agent needs hydration (after moving 200 pixels)</li>
+            <li><strong>Black border</strong> around agent = Agent needs defecation (every 24 hours, random timing)</li>
+        </ul>
+        <p><strong>Instructions:</strong> Start the simulation and watch agents move around. After agents travel enough, white dots will appear for hydration needs. Defecation needs (black borders) will appear randomly during mobility periods.</p>
+    </div>
+
+    <div class="controls">
+        <button onclick="startSim()">Start</button>
+        <button onclick="stopSim()">Stop</button>
+        <button onclick="resetSim()">Reset</button>
+        <button id="pauseBtn" onclick="togglePause()">Pause</button>
+    </div>
+
+    <canvas id="simCanvas" width="800" height="600"></canvas>
+    <canvas id="chartCanvas" width="400" height="200"></canvas>
+
+    <div class="info">
+        <h3>Current Counts:</h3>
+        <p>Time: <span id="timeCount">0</span></p>
+        <p>Susceptible: <span id="susceptibleCount">0</span></p>
+        <p>Exposed: <span id="exposedCount">0</span></p>
+        <p>Infected: <span id="infectedCount">0</span></p>
+        <p>Recovered: <span id="recoveredCount">0</span></p>
+    </div>
+
+    <script src="sim_depr_mobility_hydration_logic.js"></script>
+    <script>
+        function startSim() {
+            if (window.sim_depr_mobility_hydration_logic) {
+                window.sim_depr_mobility_hydration_logic.start();
+            }
+        }
+
+        function stopSim() {
+            if (window.sim_depr_mobility_hydration_logic) {
+                window.sim_depr_mobility_hydration_logic.stop();
+            }
+        }
+
+        function resetSim() {
+            if (window.sim_depr_mobility_hydration_logic) {
+                window.sim_depr_mobility_hydration_logic.reset();
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1013,7 +1013,7 @@ Despite the advanced pathfinding system, agents can occasionally become stuck du
 
 Add stuck detection properties to the agent creation function:
 
-```javascript
+``` javascript
 // Enhanced agent creation with stuck detection
 function createAgent(){
     const agent = {
@@ -1035,16 +1035,13 @@ function createAgent(){
 }
 ```
 
-**Key Parameters:**
-- **stuckThreshold: 90 frames** - Allows 3 seconds of no movement before intervention (at 30fps)
-- **minMovementDistance: 1.5 pixels** - Minimum distance to consider meaningful movement
-- **Position tracking** - Monitors previous frame position for comparison
+**Key Parameters:** - **stuckThreshold: 90 frames** - Allows 3 seconds of no movement before intervention (at 30fps) - **minMovementDistance: 1.5 pixels** - Minimum distance to consider meaningful movement - **Position tracking** - Monitors previous frame position for comparison
 
 ### Step 5.2: Implement Stuck Detection Function
 
 Add the stuck detection and recovery logic:
 
-```javascript
+``` javascript
 // Function to detect if agent is stuck and handle stuck situations
 function detectAndHandleStuck(agentInput) {
     // Calculate distance moved since last frame
@@ -1085,19 +1082,13 @@ function detectAndHandleStuck(agentInput) {
 }
 ```
 
-**Algorithm Breakdown:**
-1. **Movement Calculation**: Compare current position with previous frame
-2. **Movement Threshold**: Check if movement exceeds minimum distance
-3. **Stuck Counter**: Increment counter for insufficient movement
-4. **Mode-Aware Recovery**: Only intervene during d-EPR exploration mode
-5. **Target Reset**: Force new exploration target and path recalculation
-6. **Position Update**: Store current position for next frame comparison
+**Algorithm Breakdown:** 1. **Movement Calculation**: Compare current position with previous frame 2. **Movement Threshold**: Check if movement exceeds minimum distance 3. **Stuck Counter**: Increment counter for insufficient movement 4. **Mode-Aware Recovery**: Only intervene during d-EPR exploration mode 5. **Target Reset**: Force new exploration target and path recalculation 6. **Position Update**: Store current position for next frame comparison
 
 ### Step 5.3: Integrate Stuck Detection
 
 Add stuck detection to the main movement update function:
 
-```javascript
+``` javascript
 // Enhanced movement function with stuck detection
 function updateAgentMovement(agentInput) {
     // ... existing movement logic ...
@@ -1134,19 +1125,11 @@ function updateAgentMovement(agentInput) {
 
 ### Benefits of Smart Stuck Detection
 
-**Mode-Aware Intelligence:**
-- **d-EPR Mode**: Actively intervenes by forcing new target selection
-- **atHome/atWork Modes**: Allows agents to stay stationary (correct behavior)
+**Mode-Aware Intelligence:** - **d-EPR Mode**: Actively intervenes by forcing new target selection - **atHome/atWork Modes**: Allows agents to stay stationary (correct behavior)
 
-**Performance Optimized:**
-- **Lightweight Calculation**: Simple distance comparison per frame
-- **Configurable Thresholds**: Adjustable timing and sensitivity
-- **Minimal Memory Overhead**: Only stores previous position
+**Performance Optimized:** - **Lightweight Calculation**: Simple distance comparison per frame - **Configurable Thresholds**: Adjustable timing and sensitivity - **Minimal Memory Overhead**: Only stores previous position
 
-**Robust Recovery:**
-- **Automatic Target Reset**: Forces completely new exploration target
-- **Path Recalculation**: Ensures fresh pathfinding attempt
-- **Prevents Lock-up**: Guarantees agents don't get permanently stuck
+**Robust Recovery:** - **Automatic Target Reset**: Forces completely new exploration target - **Path Recalculation**: Ensures fresh pathfinding attempt - **Prevents Lock-up**: Guarantees agents don't get permanently stuck
 
 ------------------------------------------------------------------------
 
@@ -1154,20 +1137,20 @@ function updateAgentMovement(agentInput) {
 
 ### Key Achievements
 
-1. **100% Water Avoidance**: No agents cross water bodies inappropriately
-2. **Smart Stuck Detection**: Automatic recovery from stuck situations with mode-aware intervention
-3. **Realistic Navigation**: Agents find natural routes around obstacles using hierarchical pathfinding
-4. **Performance Optimized**: Efficient pathfinding with minimal computational overhead
-5. **Robust Fallbacks**: Multiple strategies ensure agents always have valid movement options
-6. **Stuck Detection & Recovery**: Mode-aware intervention prevents permanent agent lock-up
+1.  **100% Water Avoidance**: No agents cross water bodies inappropriately
+2.  **Smart Stuck Detection**: Automatic recovery from stuck situations with mode-aware intervention
+3.  **Realistic Navigation**: Agents find natural routes around obstacles using hierarchical pathfinding
+4.  **Performance Optimized**: Efficient pathfinding with minimal computational overhead
+5.  **Robust Fallbacks**: Multiple strategies ensure agents always have valid movement options
+6.  **Stuck Detection & Recovery**: Mode-aware intervention prevents permanent agent lock-up
 
 ### Performance Characteristics
 
-- **Grid Classification**: One-time O(n²) setup cost for terrain mapping
-- **Pathfinding**: O(1) for direct paths, O(k) for complex navigation where k is small
-- **Target Selection**: O(n) with early termination for valid targets
-- **Real-time Checking**: Minimal overhead with 1x radius collision detection
-- **Stuck Detection**: O(1) lightweight distance calculation per agent per frame
+-   **Grid Classification**: One-time O(n²) setup cost for terrain mapping
+-   **Pathfinding**: O(1) for direct paths, O(k) for complex navigation where k is small
+-   **Target Selection**: O(n) with early termination for valid targets
+-   **Real-time Checking**: Minimal overhead with 1x radius collision detection
+-   **Stuck Detection**: O(1) lightweight distance calculation per agent per frame
 
 ### Visual Debugging Features
 
@@ -1175,6 +1158,330 @@ The system includes comprehensive debugging visualization: - **Red circles/lines
 - **Blue waypoints**: Future waypoints in path - **Gray waypoints**: Completed waypoints - **Pause functionality**: Examine agent behavior at specific moments - **Toggle controls**: Show/hide pathfinding visualization
 
 This complete pathfinding system provides a robust foundation for realistic agent movement in cholera simulation environments while maintaining the core d-EPR mobility principles.
+
+------------------------------------------------------------------------
+
+# Phase 6: Hydration Logic Implementation
+
+## Overview
+
+Phase 6 introduces realistic water interaction behaviors to the d-EPR mobility simulation. Agents now have biological needs for hydration and defecation, creating natural opportunities for water contact that drive cholera transmission dynamics.
+
+## Implementation Components
+
+and step by step:
+
+1.  assign agent for hydration and defecation logic, show with visual Identity
+2.  Allow agent to go to water once they need defecation or hydration,
+3.  agent back to the current mode after 0.5 second in the water
+4.  Agent contamination logic - only hydration agent will get infected
+5.  water contamination Logic - only get contaminated by defecation agent
+
+### 6.1: Core Hydration Constants
+
+Add configurable parameters for hydration behavior:
+
+``` javascript
+// Hydration Logic Constants
+const HYDRATION_DISTANCE_THRESHOLD = 200; // Agent needs hydration after moving this many pixels
+const WATER_INTERACTION_DURATION = 0.5; // Duration in seconds agent stays at water for hydration/defecation
+const DEFECATION_FREQUENCY_HOURS = 24; // Agent defecates once every 24 hours
+```
+
+**Key Design Decisions:** - **Distance-based hydration**: Agents need water after traveling 200 pixels, creating movement-driven thirst - **Standardized interaction time**: 0.5 seconds provides visible interaction without slowing simulation - **Daily defecation cycle**: Realistic biological frequency with random timing during mobility periods
+
+### 6.2: Agent Hydration Properties
+
+Extend agent data structure with hydration and defecation tracking:
+
+``` javascript
+// hydration logic properties
+hydration: {
+    distanceTraveled: 0,         // cumulative distance traveled since last hydration
+    needsHydration: false,       // flag indicating if agent needs water
+    isHydrating: false,          // flag indicating agent is currently drinking water
+    hydrationTimer: 0,           // timer for how long agent has been at water
+    targetWaterbody: null,       // which waterbody agent is targeting for hydration
+    lastX: houseX,               // last recorded X position for distance calculation
+    lastY: houseY                // last recorded Y position for distance calculation
+},
+
+// defecation logic properties
+defecation: {
+    needsDefecation: false,      // flag indicating if agent needs to defecate
+    isDefecating: false,         // flag indicating agent is currently defecating
+    defecationTimer: 0,          // timer for how long agent has been defecating
+    lastDefecationTime: Math.random() * DEFECATION_FREQUENCY_HOURS, // randomize initial defecation time
+    targetWaterbody: null        // which waterbody agent is targeting for defecation
+}
+```
+
+**State Management Features:** - **Distance tracking**: Accumulates movement to trigger hydration needs - **Dual timing systems**: Separate timers for hydration (distance-based) and defecation (time-based) - **Target management**: Tracks which waterbody agent is approaching for interaction
+
+### 6.3: Water Interaction Logic
+
+#### Hydration Behavior System
+
+``` javascript
+// Function to update agent hydration needs based on distance traveled
+function updateHydrationNeeds(agent, deltaTime) {
+    // Calculate distance moved this frame
+    const currentX = agent.x;
+    const currentY = agent.y;
+    
+    if (agent.hydration.lastX !== undefined && agent.hydration.lastY !== undefined) {
+        const deltaX = currentX - agent.hydration.lastX;
+        const deltaY = currentY - agent.hydration.lastY;
+        const distanceMoved = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        agent.hydration.distanceTraveled += distanceMoved;
+    }
+    
+    // Store current position for next frame
+    agent.hydration.lastX = currentX;
+    agent.hydration.lastY = currentY;
+    
+    // Check if agent needs hydration
+    if (agent.hydration.distanceTraveled >= HYDRATION_DISTANCE_THRESHOLD && 
+        !agent.hydration.needsHydration && 
+        !agent.hydration.isHydrating) {
+        agent.hydration.needsHydration = true;
+        console.log(`Agent needs hydration after traveling ${agent.hydration.distanceTraveled.toFixed(1)} pixels`);
+    }
+}
+```
+
+#### Defecation Behavior System
+
+``` javascript
+// Function to update agent defecation needs based on time
+function updateDefecationNeeds(agent, deltaTime) {
+    // Update time since last defecation
+    agent.defecation.lastDefecationTime += deltaTime;
+    
+    // Check if it's time for defecation (only during mobility periods)
+    const currentHour = timeManager.getCurrentHour();
+    const isMobilityPeriod = (currentHour >= 5 && currentHour < 9) || (currentHour >= 15 && currentHour < 23);
+    
+    if (agent.defecation.lastDefecationTime >= DEFECATION_FREQUENCY_HOURS && 
+        !agent.defecation.needsDefecation && 
+        !agent.defecation.isDefecating &&
+        isMobilityPeriod) {
+        
+        // Add some randomness to defecation timing (within mobility period)
+        const randomDelay = Math.random() * 3; // 0-3 hours random delay
+        if (agent.defecation.lastDefecationTime >= DEFECATION_FREQUENCY_HOURS + randomDelay) {
+            agent.defecation.needsDefecation = true;
+            console.log(`Agent needs defecation after ${agent.defecation.lastDefecationTime.toFixed(1)} hours`);
+        }
+    }
+}
+```
+
+**Biological Realism Features:** - **Movement-triggered thirst**: Natural correlation between activity and hydration needs - **Time-based defecation**: Daily cycles with random timing variations - **Schedule awareness**: Defecation only occurs during mobility periods for realism
+
+### 6.4: Water Edge Positioning System
+
+``` javascript
+// Function to find position at water edge for interaction
+function findWaterEdgePosition(agentX, agentY, waterbody, agentRadius) {
+    // Calculate direction from waterbody center to agent
+    const dx = agentX - waterbody.x;
+    const dy = agentY - waterbody.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance === 0) {
+        // Agent is at center, move them to edge
+        return { x: waterbody.x + waterbody.radius + agentRadius, y: waterbody.y };
+    }
+    
+    // Normalize direction
+    const dirX = dx / distance;
+    const dirY = dy / distance;
+    
+    // Position agent at water edge (waterbody radius + agent radius for safe contact)
+    const edgeX = waterbody.x + dirX * (waterbody.radius + agentRadius);
+    const edgeY = waterbody.y + dirY * (waterbody.radius + agentRadius);
+    
+    return { x: edgeX, y: edgeY };
+}
+```
+
+**Positioning Strategy:** - **Edge calculation**: Places agent exactly at water boundary for realistic interaction - **Safe distance**: Accounts for agent radius to prevent overlap while allowing contact - **Direction-based**: Positions agent at nearest water edge based on approach direction
+
+### 6.5: Enhanced Pathfinding for Water Access
+
+#### Modified Water Avoidance Logic
+
+``` javascript
+// Function for pathfinding to avoid water bodies (with exceptions for hydration/defecation)
+function findPathAroundWater(startX, startY, targetX, targetY, agentRadius, agent = null) {
+    // Check if agent is going to water for hydration or defecation
+    const isWaterInteraction = agent && (
+        (agent.hydration.needsHydration && agent.hydration.targetWaterbody) ||
+        (agent.defecation.needsDefecation && agent.defecation.targetWaterbody)
+    );
+    
+    // If agent is going to water for interaction, allow direct path
+    if (isWaterInteraction) {
+        return [{ x: targetX, y: targetY }];
+    }
+    
+    // Normal water avoidance logic for regular movement
+    // [existing pathfinding logic continues...]
+}
+```
+
+**Exception-Based Navigation:** - **Water access permission**: Allows direct water approach for hydration/defecation only - **Context awareness**: Distinguishes between prohibited crossing and permitted interaction - **Maintains safety**: Still prevents accidental water entry during normal movement
+
+### 6.6: Priority-Based Movement System
+
+#### Enhanced d-EPR Movement with Water Interaction Priority
+
+``` javascript
+function handleDEPRMovement(agentInput) {
+    // Priority 1: Check if agent needs hydration or defecation
+    if ((agentInput.hydration.needsHydration && !agentInput.hydration.isHydrating) ||
+        (agentInput.defecation.needsDefecation && !agentInput.defecation.isDefecating)) {
+        // Water interaction takes priority over d-EPR movement
+        if (agentInput.currentTarget) {
+            moveTowardsLocation(agentInput, agentInput.currentTarget);
+        }
+        return; // Skip normal d-EPR logic while water interaction is active
+    }
+
+    // Priority 2: Check if agent is currently hydrating or defecating
+    if (agentInput.hydration.isHydrating || agentInput.defecation.isDefecating) {
+        // Agent should stay at water edge, don't move
+        return;
+    }
+
+    // Normal d-EPR movement logic continues...
+}
+```
+
+**Movement Hierarchy:** 1. **Water interaction**: Highest priority for biological needs 2. **Water interaction completion**: Stationary behavior during water contact 3. **Regular d-EPR movement**: Normal exploration when no water needs exist
+
+### 6.7: Visual Indication System
+
+#### Agent State Visualization
+
+``` javascript
+// agent drawing function with hydration/defecation indicators
+function drawAgent(agentInput) {
+    // Draw base agent with SEIR color
+    ctx.beginPath();
+    ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
+    // [SEIR color logic...]
+    ctx.fill();
+    ctx.closePath();
+
+    // Draw visual indicators for hydration and defecation needs/actions
+    // White dot for hydration need/action
+    if (agentInput.hydration.needsHydration || agentInput.hydration.isHydrating) {
+        ctx.beginPath();
+        ctx.arc(agentInput.x, agentInput.y, agentInput.radius * 0.4, 0, 2 * Math.PI);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        ctx.closePath();
+    }
+
+    // Black border for defecation need/action
+    if (agentInput.defecation.needsDefecation || agentInput.defecation.isDefecating) {
+        ctx.beginPath();
+        ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.closePath();
+    }
+}
+```
+
+**Visual Feedback System:** - **White dot**: Clear indication of hydration need/activity (40% of agent radius) - **Black border**: Distinct defecation indicator (2px stroke width) - **Progressive visibility**: Indicators appear when need arises and persist during interaction
+
+### 6.8: Cholera Transmission Integration
+
+#### Infection from Contaminated Water Consumption
+
+``` javascript
+// Handle hydration behavior with infection risk
+function handleHydration(agent, deltaTime) {
+    if (agent.hydration.isHydrating) {
+        agent.hydration.hydrationTimer += deltaTime;
+        
+        if (agent.hydration.hydrationTimer >= WATER_INTERACTION_DURATION) {
+            // Hydration complete
+            agent.hydration.isHydrating = false;
+            agent.hydration.needsHydration = false;
+            agent.hydration.hydrationTimer = 0;
+            agent.hydration.distanceTraveled = 0; // Reset distance counter
+            
+            // If agent drank from contaminated water, expose them to infection
+            if (agent.hydration.isContaminated && agent.state === 'susceptible') {
+                changeToExposed(agent);
+                console.log('Agent exposed to cholera from drinking contaminated water');
+            }
+        }
+    }
+}
+```
+
+#### Water Contamination from Defecation
+
+``` javascript
+// Handle defecation behavior with contamination risk
+function handleDefecation(agent, deltaTime) {
+    if (agent.defecation.isDefecating) {
+        agent.defecation.defecationTimer += deltaTime;
+        
+        if (agent.defecation.defecationTimer >= WATER_INTERACTION_DURATION) {
+            // Defecation complete
+            agent.defecation.isDefecating = false;
+            agent.defecation.needsDefecation = false;
+            agent.defecation.defecationTimer = 0;
+            agent.defecation.lastDefecationTime = 0; // Reset defecation timer
+            
+            // If agent defecated in clean water, contaminate it
+            if (!agent.defecation.isContaminated) {
+                updateCleanWaterbodyBacteria(agent);
+                console.log('Agent contaminated clean water through defecation');
+            }
+        }
+    }
+}
+```
+
+**Transmission Mechanisms:** - **Consumption pathway**: Drinking contaminated water infects susceptible agents - **Contamination pathway**: Defecation in clean water spreads contamination - **State preservation**: Agents maintain infection status without consuming water during defecation
+
+## System Benefits and Performance
+
+### Key Achievements
+
+1.  **Realistic Biological Behavior**: Movement-triggered hydration and time-based defecation cycles
+2.  **Cholera Transmission Dynamics**: Natural water contact drives infection spread
+3.  **Visual Feedback System**: Clear indicators for agent water interaction states
+4.  **Priority-Based Movement**: Water needs override normal d-EPR exploration
+5.  **Edge Interaction Logic**: Realistic water contact without prohibited crossing
+6.  **Performance Optimized**: Minimal computational overhead for biological state tracking
+
+### Behavioral Realism Features
+
+-   **Movement-hydration correlation**: Agents get thirsty from walking (200 pixel threshold)
+-   **Daily defecation cycles**: 24-hour biological rhythms with random timing
+-   **Schedule-aware behavior**: Defecation only during mobility periods
+-   **Nearest water selection**: Agents choose closest waterbody for efficiency
+-   **Edge positioning**: Realistic water interaction at boundaries
+
+### Performance Characteristics
+
+-   **Hydration tracking**: O(1) distance calculation per agent per frame
+-   **Defecation timing**: O(1) time comparison per agent per frame
+-   **Water interaction**: O(n) waterbody distance checks when needs arise
+-   **Visual indicators**: Minimal rendering overhead for state feedback
+-   **Movement integration**: Seamless priority system without pathfinding conflicts
+
+This hydration logic implementation completes the realistic agent behavior system, providing natural opportunities for cholera transmission while maintaining the core d-EPR mobility principles and water avoidance safety measures.
 
 ### Phase 1 Implementation Steps
 

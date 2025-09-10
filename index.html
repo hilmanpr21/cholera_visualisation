@@ -81,7 +81,7 @@
                     <h2>Simulation 5: d-EPR model</h2>
                     <p>This simulation combines the previous two approaches with 200 agents moving between home and work locations, creating a more realistic model of human movement patterns.</p>
                 </div>
-                <div class="step" data-step="sim_od_200_agents">
+                <div class="step" data-step="sim_depr_mobility_hydration_logic">
                     <h2>Simulation 6: Agent Work Origin Destination</h2>
                     <p>This simulation combines the previous two approaches with 200 agents moving between home and work locations, creating a more realistic model of human movement patterns.</p>
                 </div>
@@ -97,9 +97,9 @@
 
     <!-- Debug controls - can be hidden in final version -->
     <div class="debug-controls">
-        <button onclick="window.sim_200_agents.start()">Start</button>
-        <button onclick="window.sim_200_agents.stop()">Stop</button>
-        <button onclick="window.sim_200_agents.reset()">Reset</button>
+        <button onclick="window.sim_depr_mobility.start()">Start</button>
+        <button onclick="window.sim_depr_mobilityc.stop()">Stop</button>
+        <button onclick="window.sim_depr_mobility.reset()">Reset</button>
     </div>
     
     <!-- Link to the simulation javaScript-->
@@ -109,6 +109,7 @@
     <script src="sim_waterbody_to_contaminated_waterbody.js"></script>
     <script src="sim_waterbody_to_contaminated_waterbody_with_house.js"></script>
     <script src="sim_depr_mobility.js"></script>
+    <script src="sim_depr_mobility_hydration_logic.js"></script>
     <script src="scroll.js"></script>
 
 </body>

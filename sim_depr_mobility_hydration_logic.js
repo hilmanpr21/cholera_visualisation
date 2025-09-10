@@ -2,6 +2,35 @@
 
 (function() {
 
+    // Global variables for simulation control
+    let isPaused = false;
+    let showAgentPaths = true;
+
+    // Global pause/resume functions accessible from HTML
+    window.togglePause = function() {
+        isPaused = !isPaused;
+        const btn = document.getElementById('pauseBtn');
+        if (btn) {
+            btn.textContent = isPaused ? 'Resume' : 'Pause';
+        }
+    };
+
+    window.resetSimulation = function() {
+        if (typeof reset === 'function') {
+            reset();
+        }
+    };
+
+    // Toggle path visibility
+    document.addEventListener('DOMContentLoaded', function() {
+        const showPathsCheckbox = document.getElementById('showPaths');
+        if (showPathsCheckbox) {
+            showPathsCheckbox.addEventListener('change', function() {
+                showAgentPaths = this.checked;
+            });
+        }
+    });
+
     const canvas = document.getElementById('simCanvas')
     const ctx = canvas.getContext('2d');
 
@@ -71,6 +100,11 @@
     // Grid System Setup
     const gridSize = 20; // Size of each grid cell 20x20 pixels
 
+    // Hydration and Defecation Constants
+    const hydrationDistanceThreshold = 1000; // Agent needs hydration after moving this many pixels
+    const defecationFrequencyHours = 24; // Agent defecates once every 24 hours
+    const waterInteractionDuration = 0.5; // Duration in seconds agent stays at water
+
     // Define grid utility functions
     const grid = {
         cells: {}, // will store visited cells by agent ID
@@ -125,25 +159,305 @@
         return false;                              
     }
 
+    // Function to check if any part of a grid cell overlaps with water bodies
+    // this function checks the center, four corner, and midpoint of the edge for each cell if it is in the water
+    function cellOverlapsWater(gridX, gridY) {
+        // Calculate cell boundaries in canvas coordinates
+        const cellLeft = gridX * gridSize;
+        const cellRight = (gridX + 1) * gridSize;
+        const cellTop = gridY * gridSize;
+        const cellBottom = (gridY + 1) * gridSize;
+
+        // Check the center point first (most common case)
+        const cellCenterX = cellLeft + gridSize / 2;
+        const cellCenterY = cellTop + gridSize / 2;
+        if (isInWaterBody(cellCenterX, cellCenterY)) {
+            return true;
+        }
+
+        // Check all four corner points of the grid cell
+        const corners = [
+            { x: cellLeft, y: cellTop },       // Top-left corner
+            { x: cellRight, y: cellTop },      // Top-right corner
+            { x: cellLeft, y: cellBottom },    // Bottom-left corner
+            { x: cellRight, y: cellBottom }    // Bottom-right corner
+        ];
+
+        for (const corner of corners) {
+            if (isInWaterBody(corner.x, corner.y)) {
+                return true; // If any corner is in water, the cell overlaps with water
+            }
+        }
+
+        // Check midpoints of cell edges for better accuracy
+        const edgeMidpoints = [
+            { x: cellCenterX, y: cellTop },    // Top edge midpoint
+            { x: cellCenterX, y: cellBottom }, // Bottom edge midpoint
+            { x: cellLeft, y: cellCenterY },   // Left edge midpoint
+            { x: cellRight, y: cellCenterY }   // Right edge midpoint
+        ];
+
+        for (const midpoint of edgeMidpoints) {
+            if (isInWaterBody(midpoint.x, midpoint.y)) {
+                return true; // If any edge midpoint is in water, the cell overlaps with water
+            }
+        }
+
+        return false; // No overlap detected
+    }
+
+    // Function to check if agent with buffer radius would overlap with water cells at given position
+    function agentWouldOverlapWater(x, y, agentRadius, bufferMultiplier = 1) {
+        const effectiveRadius = agentRadius * bufferMultiplier;
+        
+        // Get all grid cells that the agent's effective radius might touch
+        const minGridX = Math.floor((x - effectiveRadius) / gridSize);
+        const maxGridX = Math.floor((x + effectiveRadius) / gridSize);
+        const minGridY = Math.floor((y - effectiveRadius) / gridSize);
+        const maxGridY = Math.floor((y + effectiveRadius) / gridSize);
+        
+        // Check each potentially affected grid cell
+        for (let gridX = minGridX; gridX <= maxGridX; gridX++) {
+            for (let gridY = minGridY; gridY <= maxGridY; gridY++) {
+                const cellKey = `${gridX},${gridY}`;
+                
+                // Skip cells outside the canvas
+                if (gridX < 0 || gridY < 0 || 
+                    gridX >= Math.ceil(canvas.width / gridSize) || 
+                    gridY >= Math.ceil(canvas.height / gridSize)) {
+                    continue;
+                }
+                
+                // If this cell is classified as water, check if agent would overlap with it
+                if (gridClassification[cellKey] === CELL_TYPES.WATER) {
+                    // Calculate cell boundaries
+                    const cellLeft = gridX * gridSize;
+                    const cellRight = (gridX + 1) * gridSize;
+                    const cellTop = gridY * gridSize;
+                    const cellBottom = (gridY + 1) * gridSize;
+                    
+                    // Check if agent's effective radius overlaps with this cell
+                    const closestX = Math.max(cellLeft, Math.min(x, cellRight));
+                    const closestY = Math.max(cellTop, Math.min(y, cellBottom));
+                    
+                    const distanceToCell = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+                    
+                    if (distanceToCell <= effectiveRadius) {
+                        return true; // Agent would overlap with this water cell
+                    }
+                }
+            }
+        }
+        
+        return false; // No overlap with water cells
+    }
+
+    // Function to check if agent's perimeter would overlap with water cells in real-time
+    // Uses SAME buffer as path planning to ensure consistency
+    function agentPerimeterOverlapsWater(x, y, agentRadius, bufferMultiplier = 1) {
+        const checkRadius = agentRadius * bufferMultiplier; // Use 1.5x radius - less aggressive than path planning
+        const numSamples = 12; // Reduced from 16 for better performance
+        
+        // Sample points around the agent's perimeter
+        for (let i = 0; i < numSamples; i++) {
+            const angle = (i / numSamples) * 2 * Math.PI;
+            const checkX = x + Math.cos(angle) * checkRadius;
+            const checkY = y + Math.sin(angle) * checkRadius;
+            
+            // Check if this perimeter point is in a water grid cell
+            const gridX = Math.floor(checkX / gridSize);
+            const gridY = Math.floor(checkY / gridSize);
+            const cellKey = `${gridX},${gridY}`;
+            
+            // Skip if outside canvas bounds
+            if (gridX < 0 || gridY < 0 || 
+                gridX >= Math.ceil(canvas.width / gridSize) || 
+                gridY >= Math.ceil(canvas.height / gridSize)) {
+                continue;
+            }
+            
+            // If any perimeter point is in water cell, return true
+            if (gridClassification[cellKey] === CELL_TYPES.WATER) {
+                return true;
+            }
+        }
+        
+        return false; // No perimeter overlap with water
+    }
+
+    // Function to check if direct path crosses water with enhanced detection
+    function pathCrossesWater(startX, startY, targetX, targetY, agentRadius) {
+        const steps = 50; // Check 50 points along the path
+        const bufferMultiplier = 1; // Use 1x agent radius for exact collision detection
+        
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const checkX = startX + t * (targetX - startX);
+            const checkY = startY + t * (targetY - startY);
+            
+            // Check if agent with buffer would overlap water at this position
+            if (agentWouldOverlapWater(checkX, checkY, agentRadius, bufferMultiplier)) {
+                return true; // Path crosses water
+            }
+        }
+        
+        return false; // Path is clear
+    }
+
+    // Function to find waypoint around water obstacles
+    function findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius) {
+        // Calculate midpoint between start and target
+        const midX = (startX + targetX) / 2;
+        const midY = (startY + targetY) / 2;
+        
+        // Try waypoints at different angles and distances around the obstacle
+        const angles = [Math.PI/4, -Math.PI/4, Math.PI/2, -Math.PI/2, 3*Math.PI/4, -3*Math.PI/4, Math.PI, 0];
+        const distances = [80, 120, 160]; // Different distances to try
+        
+        for (const distance of distances) {
+            for (const angle of angles) {
+                const waypointX = midX + Math.cos(angle) * distance;
+                const waypointY = midY + Math.sin(angle) * distance;
+                
+                // Check if waypoint is within canvas boundaries
+                if (waypointX < agentRadius * 2 || waypointX > canvas.width - agentRadius * 2 || 
+                    waypointY < agentRadius * 2 || waypointY > canvas.height - agentRadius * 2) {
+                    continue;
+                }
+                
+                // Check if waypoint itself would overlap water
+                if (agentWouldOverlapWater(waypointX, waypointY, agentRadius, 1)) {
+                    continue;
+                }
+                
+                // Check if paths to and from waypoint are clear
+                if (!pathCrossesWater(startX, startY, waypointX, waypointY, agentRadius) &&
+                    !pathCrossesWater(waypointX, waypointY, targetX, targetY, agentRadius)) {
+                    return { x: waypointX, y: waypointY };
+                }
+            }
+        }
+        
+        return null; // No suitable waypoint found
+    }
+
+    // Function for pathfinding to avoid water bodies
+    function findPathAroundWater(startX, startY, targetX, targetY, agentRadius) {
+        // Check if direct path is clear
+        if (!pathCrossesWater(startX, startY, targetX, targetY, agentRadius)) {
+            // Direct path is clear
+            return [{ x: targetX, y: targetY }];
+        }
+        
+        // Try single waypoint first (faster for simple obstacles)
+        const singleWaypoint = findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius);
+        if (singleWaypoint) {
+            return [singleWaypoint, { x: targetX, y: targetY }];
+        }
+        
+        // For complex water bodies, try multi-waypoint pathfinding
+        const multiWaypoints = findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius);
+        if (multiWaypoints && multiWaypoints.length > 0) {
+            // Add final target to the end
+            multiWaypoints.push({ x: targetX, y: targetY });
+            return multiWaypoints;
+        }
+        
+    }
+
+    // New function to find multiple waypoints for complex water navigation
+    function findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius, maxWaypoints = 3) {
+        const waypoints = [];
+        let currentX = startX;
+        let currentY = startY;
+        
+        for (let i = 0; i < maxWaypoints; i++) {
+            // Try to find a waypoint from current position towards target
+            const waypoint = findWaypointAroundWater(currentX, currentY, targetX, targetY, agentRadius);
+            
+            if (!waypoint) {
+                break; // No more waypoints found
+            }
+            
+            waypoints.push(waypoint);
+            
+            // Check if we can reach target from this waypoint
+            if (!pathCrossesWater(waypoint.x, waypoint.y, targetX, targetY, agentRadius)) {
+                // Found a complete path!
+                return waypoints;
+            }
+            
+            // Move to this waypoint and try to find the next one
+            currentX = waypoint.x;
+            currentY = waypoint.y;
+        }
+        
+        // Return whatever waypoints we found (even if incomplete)
+        return waypoints.length > 0 ? waypoints : null;
+    }
+
+    // Fallback function to find at least one safe waypoint in the general direction
+    function findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius) {
+        // Calculate direction vector to target
+        const dx = targetX - startX;
+        const dy = targetY - startY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance === 0) return null;
+        
+        // Normalize direction
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+        
+        // Try points at different distances in the general direction
+        const testDistances = [50, 80, 120, 160, 200];
+        
+        for (const testDist of testDistances) {
+            // Try the main direction and some variations
+            const variations = [
+                { x: startX + dirX * testDist, y: startY + dirY * testDist },
+                { x: startX + dirX * testDist + dirY * 40, y: startY + dirY * testDist - dirX * 40 }, // perpendicular offset
+                { x: startX + dirX * testDist - dirY * 40, y: startY + dirY * testDist + dirX * 40 }, // perpendicular offset other way
+            ];
+            
+            for (const point of variations) {
+                // Check bounds
+                if (point.x < agentRadius * 2 || point.x > canvas.width - agentRadius * 2 || 
+                    point.y < agentRadius * 2 || point.y > canvas.height - agentRadius * 2) {
+                    continue;
+                }
+                
+                // Check if point is safe and reachable
+                if (!agentWouldOverlapWater(point.x, point.y, agentRadius) &&
+                    !pathCrossesWater(startX, startY, point.x, point.y, agentRadius)) {
+                    return point;
+                }
+            }
+        }
+        
+        return null; // No fallback found
+    }
+
     // declare function to classify all grid cells by classification type
     function classifyGridCells() {
         // Calculate how many grid in the canvas
         const gridWidth = Math.ceil(canvas.width / gridSize); // calculate how many grid cells fit across (columns)
         const gridHeight= Math.ceil(canvas.height / gridSize); // calculate how many grid cells frit down (row)
 
-        // Make a loop to assign grid cell calssification one by one
+        console.log(`Classifying ${gridWidth}x${gridHeight} grid cells with enhanced overlap detection...`);
+
+        // Make a loop to assign grid cell classification one by one
         for (let x = 0; x < gridWidth; x++) {
             for (let y = 0; y < gridHeight; y++) {
                 const cellKey = `${x},${y}`;
-                const cellCenter = grid.getCellCenter(cellKey);
 
-                // check if the cell is overlap with the water bodies
-                // we will add sclassification if the cell center is inside the waterbody or not
-                if (isInWaterBody(cellCenter.x, cellCenter.y)) {
-                    // if the `isInWaterBody` returns true, we classify the cell as water
+                // Check if any part of the cell overlaps with water bodies
+                // This includes center point, corners, and edge midpoints
+                if (cellOverlapsWater(x, y)) {
+                    // if any part of the cell overlaps with water, classify as water
                     gridClassification[cellKey] = CELL_TYPES.WATER;
                 } else {
-                    // if the `isInWaterBody` returns false, we classify the cell as accessible
+                    // if no part of the cell overlaps with water, classify as accessible
                     gridClassification[cellKey] = CELL_TYPES.ACCESSIBLE;
                 }
             }
@@ -153,6 +467,7 @@
         const waterCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.WATER).length;
         const accessibleCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.ACCESSIBLE).length;
         console.log(`Grid classification complete: ${accessibleCells} accessible, ${waterCells} water cells`);
+        console.log(`Enhanced overlap detection: checking center + 4 corners + 4 edge midpoints per cell`);
     }
 
     
@@ -162,7 +477,7 @@
         { 
             x: canvas.width * 0.5,         // define x-center point
             y: canvas.height * 0.3,          // define y-center point
-            radius: 20      // radius of the waterbody
+            radius: 40     // radius of the waterbody
         }
     ];
 
@@ -228,15 +543,15 @@
     function createAgent(){
         // Calculate grid boundaries for house area (left middle section)
         const houseMinGridX = Math.floor((canvas.width * 0) / gridSize);  // 0% from left
-        const houseMaxGridX = Math.floor((canvas.width * 0.4) / gridSize);  // 40% from left
+        const houseMaxGridX = Math.floor((canvas.width * 0.35) / gridSize);  // 30% from left
         const houseMinGridY = Math.floor((canvas.height * 0) / gridSize); // 0% from top
-        const houseMaxGridY = Math.floor((canvas.height * 1) / gridSize); // 100% from top
-        
+        const houseMaxGridY = Math.floor((canvas.height * 0.9) / gridSize); // 90% from top
+
         // Calculate grid boundaries for work area (right middle section)
-        const workMinGridX = Math.floor((canvas.width * 0.6) / gridSize);   // 60% from left
-        const workMaxGridX = Math.floor((canvas.width * 1) / gridSize);   // 90% from left
+        const workMinGridX = Math.floor((canvas.width * 0.65) / gridSize);   // 60% from left
+        const workMaxGridX = Math.floor((canvas.width * 0.98) / gridSize);   // 90% from left
         const workMinGridY = Math.floor((canvas.height * 0) / gridSize);  // 0% from top
-        const workMaxGridY = Math.floor((canvas.height * 1) / gridSize);  // 100% from top
+        const workMaxGridY = Math.floor((canvas.height * 0.9) / gridSize);  // 90% from top
 
         // Get available grid cells for house and work
         const housePosition = getAvailableGridCell(houseMinGridX, houseMaxGridX, houseMinGridY, houseMaxGridY);
@@ -295,9 +610,32 @@
             },
 
             // pathfinding properties
-            currentPath: [],    // array of waypoint the agent should follow
-            pathIndex: 0,       // current waypoint index
-            needsNewPath: true, // flag to recalculate path 
+            currentPath: [],    // array of waypoints the agent should follow
+            pathIndex: 0,       // current waypoint index in the path
+            needsNewPath: true, // flag to indicate when pathfinding is needed
+
+            // stuck detection properties
+            stuckDetection: {
+                previousX: houseX,           // agent's position from previous frame
+                previousY: houseY,           // agent's position from previous frame
+                stuckFrameCount: 0,          // number of consecutive frames agent hasn't moved
+                stuckThreshold: 90,          // frames without movement before considering stuck (3 seconds at 30fps)
+                minMovementDistance: 1.5     // minimum distance to not be considered stuck
+            },
+
+            // hydration properties
+            hydration: {
+                distanceTraveled: 0,         // cumulative distance traveled since last hydration
+                needsHydration: false,       // flag indicating if agent needs water
+                lastX: houseX,               // last recorded X position for distance calculation
+                lastY: houseY                // last recorded Y position for distance calculation
+            },
+
+            // defecation properties
+            defecation: {
+                needsDefecation: false,      // flag indicating if agent needs to defecate
+                lastDefecationTime: Math.random() * defecationFrequencyHours // randomize initial defecation time
+            }
         }
 
         // mark home location as visited, since the agent starts at home
@@ -315,6 +653,93 @@
         agents.push(createAgent());
     }
 
+    // Function to update agent hydration needs based on distance traveled
+    function updateHydrationNeeds(agent, deltaTime) {
+        // Calculate distance moved this frame
+        const currentX = agent.x;
+        const currentY = agent.y;
+        
+        if (agent.hydration.lastX !== undefined && agent.hydration.lastY !== undefined) {
+            const deltaX = currentX - agent.hydration.lastX;
+            const deltaY = currentY - agent.hydration.lastY;
+            const distanceMoved = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            agent.hydration.distanceTraveled += distanceMoved;
+        }
+        
+        // Store current position for next frame
+        agent.hydration.lastX = currentX;
+        agent.hydration.lastY = currentY;
+        
+        // Check if agent needs hydration
+        if (agent.hydration.distanceTraveled >= hydrationDistanceThreshold && 
+            !agent.hydration.needsHydration) {
+            agent.hydration.needsHydration = true;
+            console.log(`Agent needs hydration after traveling ${agent.hydration.distanceTraveled.toFixed(1)} pixels`);
+        }
+    }
+
+    // Function to update agent defecation needs based on time
+    function updateDefecationNeeds(agent, deltaTime) {
+        // Update time since last defecation
+        agent.defecation.lastDefecationTime += deltaTime;
+        
+        // Check if it's time for defecation (only during mobility periods)
+        const currentHour = timeManager.getCurrentHour();
+        const isMobilityPeriod = (currentHour >= 5 && currentHour < 9) || (currentHour >= 15 && currentHour < 23);
+        
+        if (agent.defecation.lastDefecationTime >= defecationFrequencyHours && 
+            !agent.defecation.needsDefecation &&
+            isMobilityPeriod) {
+            
+            // Add some randomness to defecation timing (within mobility period)
+            const randomDelay = Math.random() * 3; // 0-3 hours random delay
+            if (agent.defecation.lastDefecationTime >= defecationFrequencyHours + randomDelay) {
+                agent.defecation.needsDefecation = true;
+                console.log(`Agent needs defecation after ${agent.defecation.lastDefecationTime.toFixed(1)} hours`);
+            }
+        }
+    }
+
+    // Function to detect if agent is stuck and handle stuck situations
+    function detectAndHandleStuck(agentInput) {
+        // Calculate distance moved since last frame
+        const deltaX = agentInput.x - agentInput.stuckDetection.previousX;
+        const deltaY = agentInput.y - agentInput.stuckDetection.previousY;
+        const distanceMoved = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // Check if agent has moved significantly
+        if (distanceMoved < agentInput.stuckDetection.minMovementDistance) {
+            // Agent hasn't moved much, increment stuck counter
+            agentInput.stuckDetection.stuckFrameCount++;
+            
+            // Check if agent has been stuck for too long
+            if (agentInput.stuckDetection.stuckFrameCount >= agentInput.stuckDetection.stuckThreshold) {
+                // Agent is stuck! Handle based on current mode
+                console.log(`Agent stuck detected after ${agentInput.stuckDetection.stuckFrameCount} frames`);
+                
+                // Only force new target if agent is in d-EPR exploration mode
+                if (agentInput.scheduleMode === 'deprMobile') {
+                    // Force agent to choose a new exploration target
+                    console.log("Forcing new target for stuck agent in d-EPR mode");
+                    agentInput.currentTarget = chooseNewExplorationTarget(agentInput);
+                    agentInput.needsNewPath = true;
+                    
+                    // Reset stuck detection
+                    agentInput.stuckDetection.stuckFrameCount = 0;
+                }
+                // For 'atHome' and 'atWork' modes, don't change targets as agents should stay put
+            }
+        } else {
+            // Agent moved significantly, reset stuck counter
+            agentInput.stuckDetection.stuckFrameCount = 0;
+        }
+
+        // Update previous position for next frame
+        agentInput.stuckDetection.previousX = agentInput.x;
+        agentInput.stuckDetection.previousY = agentInput.y;
+    }
+
     // function to check if the agent has reached its target
     function reachedTarget(agentInput) {
         if (!agentInput.currentTarget)  return true; // if no target, consider it reached
@@ -327,30 +752,99 @@
         return distance < agentInput.radius; // if distance is less than agent's radius, consider it reached
     }
 
-    // Declare function to choose new exploration target
+    // Function to check if a position is safely away from water bodies
+    function isPositionSafeFromWater(x, y, agentRadius, safetyBuffer = 3) {
+        // Use a larger buffer to ensure targets aren't placed too close to water
+        const effectiveRadius = agentRadius * safetyBuffer;
+        
+        // Get all grid cells that might be affected by the safety buffer
+        const minGridX = Math.floor((x - effectiveRadius) / gridSize);
+        const maxGridX = Math.floor((x + effectiveRadius) / gridSize);
+        const minGridY = Math.floor((y - effectiveRadius) / gridSize);
+        const maxGridY = Math.floor((y + effectiveRadius) / gridSize);
+        
+        // Check each potentially affected grid cell
+        for (let gridX = minGridX; gridX <= maxGridX; gridX++) {
+            for (let gridY = minGridY; gridY <= maxGridY; gridY++) {
+                const cellKey = `${gridX},${gridY}`;
+                
+                // Skip cells outside the canvas
+                if (gridX < 0 || gridY < 0 || 
+                    gridX >= Math.ceil(canvas.width / gridSize) || 
+                    gridY >= Math.ceil(canvas.height / gridSize)) {
+                    continue;
+                }
+                
+                // If this cell is water, check if it's too close
+                if (gridClassification[cellKey] === CELL_TYPES.WATER) {
+                    // Calculate cell boundaries
+                    const cellLeft = gridX * gridSize;
+                    const cellRight = (gridX + 1) * gridSize;
+                    const cellTop = gridY * gridSize;
+                    const cellBottom = (gridY + 1) * gridSize;
+                    
+                    // Check distance to this water cell
+                    const closestX = Math.max(cellLeft, Math.min(x, cellRight));
+                    const closestY = Math.max(cellTop, Math.min(y, cellBottom));
+                    
+                    const distanceToWater = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+                    
+                    if (distanceToWater <= effectiveRadius) {
+                        return false; // Too close to water
+                    }
+                }
+            }
+        }
+        
+        return true; // Safe from water
+    }
+
+    // Declare function to choose new exploration target (water-aware with safety buffer)
     function chooseNewExplorationTarget(agentInput) {
         // get grid height and width
         const gridWidth = Math.ceil(canvas.width / gridSize); // calculate how many grid cells fit across (columns)
         const gridHeight = Math.ceil(canvas.height / gridSize); // calculate how many grid cells fit down (rows)
 
-        // try to find unvisited cell
+        // try to find unvisited accessible cell that's safe from water
         let attempts = 0; // counter for attempts to find a new target
-        while (attempts < 20 ) { // limit attemp to avoid infinity loop
+        while (attempts < 100 ) { // increased attempts for safe accessible cells
             // generate random cell coordinates
             const gridX = Math.floor(Math.random() * gridWidth); // random x coordinate
             const gridY = Math.floor(Math.random() * gridHeight); // random y coordinate
             const cellKey = `${gridX},${gridY}`; // create cell key
 
-            // check if the cell never been visited and only select accessible cells
+            // check if the cell never been visited and is accessible (not water)
             if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
-                // return the center of the cell as the new target
-                return grid.getCellCenter(cellKey);
+                const cellCenter = grid.getCellCenter(cellKey);
+                
+                // Additional check: ensure the target is safely away from water
+                if (isPositionSafeFromWater(cellCenter.x, cellCenter.y, agentInput.radius)) {
+                    return cellCenter;
+                }
             }
             attempts++;
         }
 
-        // Fallback: find any accessible cell (visited or unvisited)
-        attempts = 0; 
+        // Fallback: find any accessible cell (visited or unvisited) that's safe from water
+        attempts = 0;
+        while (attempts < 200) {
+            const gridX = Math.floor(Math.random() * gridWidth);
+            const gridY = Math.floor(Math.random() * gridHeight);
+            const cellKey = `${gridX},${gridY}`;
+
+            if (gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
+                const cellCenter = grid.getCellCenter(cellKey);
+                
+                // Check if safe from water
+                if (isPositionSafeFromWater(cellCenter.x, cellCenter.y, agentInput.radius)) {
+                    return cellCenter;
+                }
+            }
+            attempts++;
+        }
+
+        // Final fallback: find any accessible cell (even if close to water, but not in water)
+        attempts = 0;
         while (attempts < 100) {
             const gridX = Math.floor(Math.random() * gridWidth);
             const gridY = Math.floor(Math.random() * gridHeight);
@@ -362,30 +856,33 @@
             attempts++;
         }
 
-        // if all cells are visited, or could not find accessible cell, return random cell
+        // Final fallback: return random cell (should rarely happen)
         const gridX = Math.floor(Math.random() * gridWidth);
         const gridY = Math.floor(Math.random() * gridHeight);
         return grid.getCellCenter(`${gridX},${gridY}`);
     }
 
-    // function to choose return target
+    // function to choose return target (water-aware)
     function chooseReturnTarget(agentInput) {
-        // Get all accessible cell that has been visited by the agent
-        const visitedAccessibleCells = Object.keys(agentInput.visitedCells).filter(cellKey => gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE);
+        // Get all accessible cells that have been visited by the agent
+        const visitedAccessibleCells = Object.keys(agentInput.visitedCells).filter(cellKey => 
+            gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE
+        );
 
-        // if no visited locations, return current position
-        // this case should not happen in normal operation, but it's a safety check
+        // if no visited accessible locations, return home
         if (visitedAccessibleCells.length === 0) {
-            return { x: agentInput.house.x, y: agentInput.house.y }; // return current position
+            return { x: agentInput.house.x, y: agentInput.house.y };
         }
 
-        // calculate total number of visits to all cells
-        const totalVisits = Object.values(agentInput.visitedCells).reduce((sum, count) =>  sum + count, 0);
+        // calculate total number of visits to accessible cells only
+        const totalVisits = visitedAccessibleCells.reduce((sum, cellKey) =>  
+            sum + agentInput.visitedCells[cellKey], 0
+        );
 
         // Choose random number between 0 and total visits
         let randomValue = Math.floor(Math.random() * totalVisits);
 
-        // go through visited cells to find the target cell by subtracting each count until you go below zero
+        // go through visited accessible cells to find the target cell
         for (const cellKey of visitedAccessibleCells) {
             randomValue -= agentInput.visitedCells[cellKey]; // subtract the visit count
             if (randomValue < 0) {
@@ -399,119 +896,59 @@
         return { x: agentInput.house.x, y: agentInput.house.y };
     }
 
-    // declare function to check if a direct path crosses water or not
-    function pathCrossesWater(startInputX, startInputY, targetInputX, targetInputY) {
-        const steps = 10;       // number of points to check along the path
-
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps; 
-            const checkX = startInputX + t * (targetInputX - startInputX);
-            const checkY = startInputY + t * (targetInputY - startInputY);
-
-            if (isInWaterBody(checkX, checkY)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Function to find a waypointaround waterbodies
-    function findWaypointAroundWater(startInputX, startInputY, targetInputX, targetInputY) {
-        // Find the center of water bodies between start and target
-        const midX = (startInputX + targetInputX) / 2;
-        const midY = (startInputY + targetInputY) / 2;
-
-        // Try waypoints at different angles around the obstacle
-        const angles = [Math.PI/4, -Math.PI/4, Math.PI/2, -Math.PI/2, 3*Math.PI/4, -3*Math.PI/4];
-        const wayPointDistance = 60; // distance (in pixels) to place waypoints from obstacle center
-
-        for (const angle of angles) {
-            // declare new way point
-            const waypointX = midX + Math.cos(angle) * wayPointDistance;
-            const waypointY = midY + Math.sin(angle) * wayPointDistance;
-
-            // cherck if waypoint is within the canvas boundaries
-            if (waypointX < 0 || waypointX > canvas.width || waypointY < 0 || waypointY > canvas.height) {
-                continue; // Skip this waypoint if it's outside canvas
-            }
-
-            // check if waypoint is accessible and paths to/from it are clear
-            if (!isInWaterBody(waypointX, waypointY) && !pathCrossesWater(startInputX, startInputY, waypointX, waypointY) && !pathCrossesWater(waypointX, waypointY, targetInputX, targetInputY)) {
-                return { x: waypointX, y: waypointY };
-            }
-        }
-
-        // if no suitable waypoint
-        return null;
-    }
 
 
-    // declare function for pathfinding to avoid water bodies
-    function findPathAroundWater(startInputX, startInputY, targetInputX, targetInputY) {
-        // check if direct path does cross water or not
-        // `pathCrossesWater` is false means the path is clear from waterbody
-        if (!pathCrossesWater(startInputX, startInputY, targetInputX, targetInputY)) {
-            //direct path is clear
-            return [{ x: targetInputX, y: targetInputY}];
-        }
-
-        // find intermediate waypoint to go around water
-        const waypoint = findWaypointAroundWater(startInputX, startInputY, targetInputX, targetInputY);
-
-
-        if (waypoint) {
-            // return path with waypoint and target point
-            return [waypoint, { x: targetInputX, y: targetInputY }];
-        }
-
-        // Fallback: direct Path (incase it fail)
-        return [{ x: targetInputX, y: targetInputY}];
-    }
-
-    // function to move agent to specific location (like home or work)
+    // function to move agent to specific location with pathfinding (like home or work)
     function moveTowardsLocation(agentInput, targetLocationInput) {
-        // check if we need a new path or current path is in valid
-        // This step is to check if the current part is crossing the waterbody or not, if it is, it will return with array of waypoints to avoid waterbody
+        // Check if we need a new path or current path is invalid
         if (agentInput.needsNewPath || agentInput.currentPath.length === 0) {
-            // Calculate path  to check wayfinding around the water
+            // Calculate path using enhanced pathfinding around water
             agentInput.currentPath = findPathAroundWater(
-                agentInput.x, agentInput.y, targetLocationInput.x, targetLocationInput.y
+                agentInput.x, agentInput.y, 
+                targetLocationInput.x, targetLocationInput.y, 
+                agentInput.radius
             );
-            agentInput.pathIndex = 0;               // to start the path index from the beginning (index 0)
-            agentInput.needsNewPath = false;        // to avoid generating new path
+            agentInput.pathIndex = 0;               // start from the beginning of the path
+            agentInput.needsNewPath = false;        // mark that we have a valid path
         }
 
-        // Get current waypoint to gets the next destination point in the path sequence.
-        const currentWayPoint = agentInput.currentPath[agentInput.pathIndex];
-        // check if no currentWayPoint, meaning the path is completed
-        if (!currentWayPoint) {
-            // set that agent needs a new path
+        // Get current waypoint in the path
+        const currentWaypoint = agentInput.currentPath[agentInput.pathIndex];
+        if (!currentWaypoint) {
+            // Path completed or invalid, mark for new path calculation
             agentInput.needsNewPath = true;
             return;
         }
 
-        // Calculate distance between current position with the target location
-        const dx = currentWayPoint.x - agentInput.x;
-        const dy = currentWayPoint.y - agentInput.y;
+        // Calculate distance to current waypoint
+        const dx = currentWaypoint.x - agentInput.x;
+        const dy = currentWaypoint.y - agentInput.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // check if agent have reached the waypoint
+        // Check if we've reached the current waypoint
         if (distance <= agentInput.speed) {
-            // reached current waypoint, move to the next waypoint in the path or sequence
+            // Move to next waypoint in the path
             agentInput.pathIndex++;
-
+            
             // If we've reached the end of the path, mark for new path calculation
             if (agentInput.pathIndex >= agentInput.currentPath.length) {
                 agentInput.needsNewPath = true;
             }
         } else {
-            // else - meaning the agent is not in the target waypoint yet
-            // move towards current way point
-            // calculate new position
+            // Calculate intended new position
             const newX = agentInput.x + (dx/distance) * agentInput.speed;
             const newY = agentInput.y + (dy/distance) * agentInput.speed;
 
-            //add boundaries to present agent from going off-canvas
+            // REAL-TIME NAVIGATION CHECK: Check if agent would overlap water at new position
+            if (agentWouldOverlapWater(newX, newY, agentInput.radius, 1)) {
+                // Agent would get too close to water, force new path calculation
+                console.log("Real-time water detection: forcing new path calculation");
+                agentInput.needsNewPath = true;
+                return; // Skip movement this frame and recalculate path next frame
+            }
+
+            // Move towards current waypoint (path is clear)
+            // Add boundaries to prevent agent from going off-canvas
             agentInput.x = Math.max(agentInput.radius, Math.min(canvas.width - agentInput.radius, newX));
             agentInput.y = Math.max(agentInput.radius, Math.min(canvas.height - agentInput.radius, newY));
         }
@@ -530,12 +967,13 @@
         drawGrid();
         drawGridClassification();
 
-
-        
-        // Draw agent trails
-        // agents.forEach(agent => {
-        //     drawAgentTrail(agent);
-        // });
+        // Draw agent trails and paths (if enabled)
+        if (showAgentPaths) {
+            agents.forEach(agent => {
+                // drawAgentTrail(agent);
+                // drawAgentPath(agent); // Draw pathfinding visualization - COMMENTED OUT FOR PRODUCTION
+            });
+        }
 
         //Draw the agent and their house
         agents.forEach(agent => {
@@ -545,31 +983,7 @@
         });
     }
 
-    // Add this function for debugging (optional)
-    function drawGridClassification() {
-        for (const cellKey in gridClassification) {
-            const center = grid.getCellCenter(cellKey);
-            const cellType = gridClassification[cellKey];
-            
-            if (cellType === CELL_TYPES.WATER) {
-                ctx.fillStyle = 'rgba(0, 0, 255, 0.2)'; // Light blue overlay
-                ctx.fillRect(
-                    center.x - gridSize/2, 
-                    center.y - gridSize/2, 
-                    gridSize, 
-                    gridSize
-                );
-            } else if (cellType === CELL_TYPES.ACCESSIBLE) {
-                ctx.fillStyle = 'rgba(0, 255, 0, 0.1)'; // Light green overlay
-                ctx.fillRect(
-                    center.x - gridSize/2, 
-                    center.y - gridSize/2, 
-                    gridSize, 
-                    gridSize
-                );
-            }
-        }
-    }
+    
 
     // agent drawing function
     function drawAgent(agentInput) {
@@ -595,10 +1009,27 @@
         }
 
         ctx.fill();
-        // ctx.strokeStyle = '#333';
-        // ctx.lineWidth = 1;
-        // ctx.stroke();
         ctx.closePath();
+
+        // Draw visual indicators for hydration and defecation needs
+        // White dot for hydration need
+        if (agentInput.hydration.needsHydration) {
+            ctx.beginPath();
+            ctx.arc(agentInput.x, agentInput.y, agentInput.radius * 0.4, 0, 2 * Math.PI);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // Black border for defecation need
+        if (agentInput.defecation.needsDefecation) {
+            ctx.beginPath();
+            ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
     }
 
     // Draw House
@@ -685,14 +1116,93 @@
         }
     }
 
-    // Function to handle d-EPR movement 
-    function handleDEPRMovement(agentInput) {
+    // Add this function for debugging (optional)
+    function drawGridClassification() {
+        for (const cellKey in gridClassification) {
+            const center = grid.getCellCenter(cellKey);
+            const cellType = gridClassification[cellKey];
+            
+            if (cellType === CELL_TYPES.WATER) {
+                ctx.fillStyle = 'rgba(0, 0, 255, 0.2)'; // Light blue overlay
+                ctx.fillRect(
+                    center.x - gridSize/2, 
+                    center.y - gridSize/2, 
+                    gridSize, 
+                    gridSize
+                );
+            } else if (cellType === CELL_TYPES.ACCESSIBLE) {
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.1)'; // Light green overlay
+                ctx.fillRect(
+                    center.x - gridSize/2, 
+                    center.y - gridSize/2, 
+                    gridSize, 
+                    gridSize
+                );
+            }
+        }
+    }
 
+    // DEBUG: Draw agent path and targets for pathfinding visualization
+    // COMMENTED OUT FOR PRODUCTION - Remove comments to enable debug visualization
+    /*
+    function drawAgentPath(agent) {
+        // Draw current target (final destination)
+        if (agent.currentTarget) {
+            ctx.beginPath();
+            ctx.arc(agent.currentTarget.x, agent.currentTarget.y, 8, 0, 2 * Math.PI);
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)'; // Red for final target
+            ctx.fill();
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Draw line from agent to final target
+            ctx.beginPath();
+            ctx.moveTo(agent.x, agent.y);
+            ctx.lineTo(agent.currentTarget.x, agent.currentTarget.y);
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)'; // Light red line to target
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // Draw current path waypoints and lines
+        if (agent.currentPath && agent.currentPath.length > 0) {
+            // Draw waypoints
+            for (let i = 0; i < agent.currentPath.length; i++) {
+                const waypoint = agent.currentPath[i];
+                ctx.beginPath();
+                ctx.arc(waypoint.x, waypoint.y, 4, 0, 2 * Math.PI);
+                
+                if (i === agent.pathIndex) {
+                    ctx.fillStyle = 'rgba(0, 255, 0, 0.8)'; // Green for current waypoint
+                } else if (i < agent.pathIndex) {
+                    ctx.fillStyle = 'rgba(128, 128, 128, 0.5)'; // Gray for completed waypoints
+                } else {
+                    ctx.fillStyle = 'rgba(0, 0, 255, 0.6)'; // Blue for future waypoints
+                }
+                ctx.fill();
+            }
+
+            // Draw path lines
+            ctx.beginPath();
+            ctx.moveTo(agent.x, agent.y);
+            for (let i = agent.pathIndex; i < agent.currentPath.length; i++) {
+                ctx.lineTo(agent.currentPath[i].x, agent.currentPath[i].y);
+            }
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)'; // Green for planned path
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    }
+    */
+
+    // Function to handle d-EPR movement with pathfinding
+    function handleDEPRMovement(agentInput) {
         // If agent is at home or work and moved back to depr mobility mode
         if (!agentInput.currentTarget && agentInput.deprState.savedTarget) {
             agentInput.currentTarget = agentInput.deprState.savedTarget;
             agentInput.deprState.savedTarget = null;                            // clear the saved target again
-            agentInput.needsNewPath = true;                                         
+            agentInput.needsNewPath = true;                                     // force pathfinding recalculation
         }
 
         // if agent has no target or has reached the current target, choose a new target
@@ -702,25 +1212,33 @@
             const pNew = agentInput.rho * Math.pow(agentInput.uniqueVisitCount, -agentInput.gamma); // calculate the probability of choosing a new target
 
             if (Math.random() < pNew) {
-                // meaning EXPLORE: choose a new unvisited cell
+                // meaning EXPLORE: choose a new unvisited accessible cell
                 agentInput.currentTarget = chooseNewExplorationTarget(agentInput);
             } else {
-                // meaning RETURN: choose a return target
+                // meaning RETURN: choose a return target from accessible cells
                 agentInput.currentTarget = chooseReturnTarget(agentInput);
             }
-            agentInput.needsNewPath = true;     // to make agent calculate new path
+            agentInput.needsNewPath = true;     // force pathfinding recalculation for new target
         }
 
-        // Move towards the current target
+        // Move towards the current target using pathfinding
         moveTowardsLocation(agentInput, agentInput.currentTarget);
 
-        // track the current cell visitation
-        const currentCellKey = grid.getCellKey(agentInput.x, agentInput.y); // get the current cell key based on agent's position
-        if (!agentInput.visitedCells[currentCellKey]) { // if the cell has not been visited
-            agentInput.visitedCells[currentCellKey] = 0; // initialize the visit count
-            agentInput.uniqueVisitCount++; // increment unique visit count
+        // REAL-TIME SAFETY CHECK: If agent is currently too close to water, force new path calculation
+        if (agentWouldOverlapWater(agentInput.x, agentInput.y, agentInput.radius, 1)) {
+            console.log("Agent too close to water, forcing emergency path recalculation");
+            agentInput.needsNewPath = true;
         }
-        agentInput.visitedCells[currentCellKey]++; // increment the visit count for the current cell
+
+        // track the current cell visitation (only for accessible cells)
+        const currentCellKey = grid.getCellKey(agentInput.x, agentInput.y); // get the current cell key based on agent's position
+        if (gridClassification[currentCellKey] === CELL_TYPES.ACCESSIBLE) {
+            if (!agentInput.visitedCells[currentCellKey]) { // if the cell has not been visited
+                agentInput.visitedCells[currentCellKey] = 0; // initialize the visit count
+                agentInput.uniqueVisitCount++; // increment unique visit count
+            }
+            agentInput.visitedCells[currentCellKey]++; // increment the visit count for the current cell
+        }
     }
 
     // Function to update agent movement based on schedule
@@ -744,6 +1262,7 @@
             agentInput.previousMode = agentInput.scheduleMode;  // save the previous mode before changing
             agentInput.scheduleMode = newMode;                  // set the agent mode from the new mode
             agentInput.currentTarget = null;                    // reset the current target when changing mode
+            agentInput.needsNewPath = true;                     // force pathfinding recalculation
         }
 
         // Helper function to check if agent is close enough to target to stop moving
@@ -783,6 +1302,9 @@
                 handleDEPRMovement(agentInput);
                 break;
         }
+
+        // STUCK DETECTION: Check if agent is stuck and handle accordingly
+        detectAndHandleStuck(agentInput);
     }
 
 
@@ -1026,6 +1548,15 @@
 
     // Render the canvas in loop
     function animate(currentTime) {
+        // Always continue the animation loop but skip updates when paused
+        animationId = requestAnimationFrame(animate);
+        
+        // Skip updates if paused but still draw the current state
+        if (isPaused) {
+            drawScene();
+            return;
+        }
+        
         const deltaTime = getDeltaTime(currentTime)     // to calculate the deltaTime
 
         // Update simulation time
@@ -1036,6 +1567,10 @@
         
         
         agents.forEach(agent => {
+            // Update hydration and defecation needs
+            updateHydrationNeeds(agent, deltaTime);
+            updateDefecationNeeds(agent, deltaTime);
+            
             changeToExposed(agent);                         // to change from susceptible to exposed
             updateAgentMovement(agent);                     // to call control agent movement
             updateAgentState(agent, deltaTime);             // to change the SEIR state
@@ -1051,9 +1586,6 @@
             drawSEIRChart();  // <-- draw chart here
             timeAccumulator = 0;
         }
-
-        
-        animationId = requestAnimationFrame(animate);                 // To schedule next frame (re-run animation) before processing and capture the ID  
     }
 
     //declare reset function
@@ -1065,7 +1597,7 @@
 
         // recreate agents array 
         agents = [];
-        for (let i = 0; i < 10; i++){
+        for (let i = 0; i < 20; i++){
             agents.push(createAgent())
         }
 
@@ -1131,7 +1663,7 @@
     }
 
 
-    window.sim_depr_mobility = { 
+    window.sim_depr_mobility_hydration_logic = { 
         start, 
         stop,
         reset // Optional but useful for debugging
