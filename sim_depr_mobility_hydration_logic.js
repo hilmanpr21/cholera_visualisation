@@ -101,8 +101,17 @@
     const gridSize = 20; // Size of each grid cell 20x20 pixels
 
     // Hydration and Defecation Constants
-    const hydrationDistanceThreshold = 1000; // Agent needs hydration after moving this many pixels
-    const defecationFrequencyHours = 24; // Agent defecates once every 24 hours
+    const hydrationDistanceThreshold = 2000; // Agent needs hydration after moving this many pixels (reduced for testing)
+    const defecationFrequencyHours = 24; // Agent defecates once every 1 hour (reduced for testing)
+    const waterStayDuration = 0.1; // Time in seconds to stay in water for hydration/defecation
+
+    // Water interaction modes
+    const WATER_MODES = {
+        AVOIDING: 'avoiding',       // Normal mode - avoid water bodies
+        SEEKING: 'seeking',         // Seeking water for hydration/defecation
+        IN_WATER: 'in_water',       // Currently in water body
+        RETURNING: 'returning'      // Returning to schedule after water interaction
+    };
     const waterInteractionDuration = 0.5; // Duration in seconds agent stays at water
 
     // Define grid utility functions
@@ -363,6 +372,15 @@
             return multiWaypoints;
         }
         
+        // Fallback: try to get closer by finding a waypoint towards the target
+        const fallbackWaypoint = findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius);
+        if (fallbackWaypoint) {
+            return [fallbackWaypoint];
+        }
+        
+        // Last resort: direct path (agent will have to cross water)
+        console.warn("No clear path found, using direct route");
+        return [{ x: targetX, y: targetY }];
     }
 
     // New function to find multiple waypoints for complex water navigation
@@ -436,6 +454,56 @@
         }
         
         return null; // No fallback found
+    }
+
+    // Function to find the center of the nearest water body for hydration/defecation
+    function findNearestWaterCenter(agentX, agentY) {
+        let nearestCenter = null;
+        let nearestDistance = Infinity;
+
+        // Check contaminated water bodies (these have radius, not width/height)
+        for (const waterbody of contaminatedWaterbodies) {
+            // These waterbodies use x,y as center and have radius
+            const centerX = waterbody.x;
+            const centerY = waterbody.y;
+
+            // Calculate distance from agent to water center
+            const dx = centerX - agentX;
+            const dy = centerY - agentY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Update nearest if this is closer
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearestCenter = { x: centerX, y: centerY };
+            }
+        }
+
+        // Check clean water bodies (these also have radius, not width/height)
+        for (const waterbody of cleanWaterbodies) {
+            // These waterbodies use x,y as center and have radius
+            const centerX = waterbody.x;
+            const centerY = waterbody.y;
+
+            // Calculate distance from agent to water center
+            const dx = centerX - agentX;
+            const dy = centerY - agentY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Update nearest if this is closer
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearestCenter = { x: centerX, y: centerY };
+            }
+        }
+
+        if (nearestCenter) {
+            console.log(`Found nearest water center at (${nearestCenter.x}, ${nearestCenter.y}) distance: ${nearestDistance.toFixed(2)}`);
+        } else {
+            console.warn("No water bodies found!");
+        }
+
+        return nearestCenter;
     }
 
     // declare function to classify all grid cells by classification type
@@ -635,6 +703,16 @@
             defecation: {
                 needsDefecation: false,      // flag indicating if agent needs to defecate
                 lastDefecationTime: Math.random() * defecationFrequencyHours // randomize initial defecation time
+            },
+
+            // Water interaction system
+            waterInteraction: {
+                mode: WATER_MODES.AVOIDING,     // current water interaction mode
+                waterTarget: null,               // target water center position
+                waterStayTimer: 0,               // timer for staying in water
+                previousScheduleMode: null,      // saved schedule mode before water interaction
+                previousTarget: null,            // saved target before water interaction
+                satisfyingNeed: null            // which need is being satisfied ('hydration' or 'defecation')
             }
         }
 
@@ -673,9 +751,17 @@
         
         // Check if agent needs hydration
         if (agent.hydration.distanceTraveled >= hydrationDistanceThreshold && 
-            !agent.hydration.needsHydration) {
+            !agent.hydration.needsHydration && 
+            agent.waterInteraction.mode === WATER_MODES.AVOIDING) {
             agent.hydration.needsHydration = true;
-            console.log(`Agent needs hydration after traveling ${agent.hydration.distanceTraveled.toFixed(1)} pixels`);
+            
+            // Trigger water-seeking mode
+            agent.waterInteraction.mode = WATER_MODES.SEEKING;
+            agent.waterInteraction.waterTarget = findNearestWaterCenter(agent.x, agent.y);
+            agent.waterInteraction.satisfyingNeed = 'hydration';
+            agent.needsNewPath = true;
+            
+            console.log(`Agent at (${agent.x.toFixed(1)}, ${agent.y.toFixed(1)}) needs hydration after traveling ${agent.hydration.distanceTraveled.toFixed(1)} pixels - seeking water at (${agent.waterInteraction.waterTarget?.x}, ${agent.waterInteraction.waterTarget?.y})`);
         }
     }
 
@@ -690,13 +776,21 @@
         
         if (agent.defecation.lastDefecationTime >= defecationFrequencyHours && 
             !agent.defecation.needsDefecation &&
+            agent.waterInteraction.mode === WATER_MODES.AVOIDING &&
             isMobilityPeriod) {
             
             // Add some randomness to defecation timing (within mobility period)
             const randomDelay = Math.random() * 3; // 0-3 hours random delay
             if (agent.defecation.lastDefecationTime >= defecationFrequencyHours + randomDelay) {
                 agent.defecation.needsDefecation = true;
-                console.log(`Agent needs defecation after ${agent.defecation.lastDefecationTime.toFixed(1)} hours`);
+                
+                // Trigger water-seeking mode
+                agent.waterInteraction.mode = WATER_MODES.SEEKING;
+                agent.waterInteraction.waterTarget = findNearestWaterCenter(agent.x, agent.y);
+                agent.waterInteraction.satisfyingNeed = 'defecation';
+                agent.needsNewPath = true;
+                
+                console.log(`Agent at (${agent.x.toFixed(1)}, ${agent.y.toFixed(1)}) needs defecation after ${agent.defecation.lastDefecationTime.toFixed(1)} hours - seeking water at (${agent.waterInteraction.waterTarget?.x}, ${agent.waterInteraction.waterTarget?.y})`);
             }
         }
     }
@@ -954,6 +1048,97 @@
         }
     }
 
+    // Function to move towards water without avoiding water bodies (for hydration/defecation)
+    function moveTowardsWater(agentInput, targetWaterLocation) {
+        // Calculate direct distance to water target
+        const dx = targetWaterLocation.x - agentInput.x;
+        const dy = targetWaterLocation.y - agentInput.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Only log occasionally to avoid spam
+        if (Math.random() < 0.01) { // 1% chance to log
+            console.log(`moveTowardsWater: Agent at (${agentInput.x.toFixed(1)}, ${agentInput.y.toFixed(1)}) moving to water at (${targetWaterLocation.x}, ${targetWaterLocation.y}), distance: ${distance.toFixed(2)}`);
+        }
+
+        // Check if agent has reached the water target
+        if (distance <= agentInput.speed) {
+            // Agent reached water - move directly to center
+            agentInput.x = targetWaterLocation.x;
+            agentInput.y = targetWaterLocation.y;
+            console.log(`Agent reached water center at (${targetWaterLocation.x}, ${targetWaterLocation.y})`);
+            return true; // Indicate water reached
+        } else {
+            // Move directly towards water center (no pathfinding, no water avoidance)
+            const newX = agentInput.x + (dx/distance) * agentInput.speed;
+            const newY = agentInput.y + (dy/distance) * agentInput.speed;
+
+            // Apply boundary constraints
+            agentInput.x = Math.max(agentInput.radius, Math.min(canvas.width - agentInput.radius, newX));
+            agentInput.y = Math.max(agentInput.radius, Math.min(canvas.height - agentInput.radius, newY));
+            
+            return false; // Still moving towards water
+        }
+    }
+
+    // Function to handle water stay timer and state transitions
+    function updateWaterInteraction(agent, deltaTime) {
+        const waterMode = agent.waterInteraction.mode;
+
+        switch (waterMode) {
+            case WATER_MODES.IN_WATER:
+                // Increment water stay timer
+                agent.waterInteraction.waterStayTimer += deltaTime;
+                console.log(`Agent in water, timer: ${agent.waterInteraction.waterStayTimer.toFixed(2)}/${waterStayDuration}`);
+                
+                // Check if 0.5 seconds have passed
+                if (agent.waterInteraction.waterStayTimer >= waterStayDuration) {
+                    // Satisfy the need
+                    if (agent.waterInteraction.satisfyingNeed === 'hydration') {
+                        agent.hydration.needsHydration = false;
+                        agent.hydration.distanceTraveled = 0; // Reset distance counter
+                        console.log("Agent satisfied hydration need");
+                    } else if (agent.waterInteraction.satisfyingNeed === 'defecation') {
+                        agent.defecation.needsDefecation = false;
+                        agent.defecation.lastDefecationTime = 0; // Reset defecation timer
+                        console.log("Agent satisfied defecation need");
+                    }
+
+                    // Transition to returning mode
+                    agent.waterInteraction.mode = WATER_MODES.RETURNING;
+                    agent.waterInteraction.waterStayTimer = 0;
+                    agent.needsNewPath = true; // Force new path calculation
+                    
+                    // Set target based on current schedule
+                    const currentHour = timeManager.getCurrentHour();
+                    const currentScheduleMode = getCurrentScheduleMode(currentHour);
+                    
+                    if (currentScheduleMode === 'atHome') {
+                        agent.currentTarget = agent.house;
+                    } else if (currentScheduleMode === 'atWork') {
+                        agent.currentTarget = agent.work;
+                    } else {
+                        // For mobile mode, choose a d-EPR target
+                        agent.currentTarget = chooseNewExplorationTarget(agent);
+                    }
+                    console.log(`Agent transitioning to RETURNING mode, target: (${agent.currentTarget.x}, ${agent.currentTarget.y})`);
+                }
+                break;
+
+            case WATER_MODES.RETURNING:
+                // Agent is returning to schedule target
+                // This will be handled by normal movement logic
+                // Once agent reaches the first target after water, switch back to avoiding mode
+                if (agent.currentTarget && reachedTarget(agent)) {
+                    agent.waterInteraction.mode = WATER_MODES.AVOIDING;
+                    agent.waterInteraction.waterTarget = null;
+                    agent.waterInteraction.satisfyingNeed = null;
+                    agent.needsNewPath = true;
+                    console.log("Agent finished water interaction, back to normal water-avoidance mode");
+                }
+                break;
+        }
+    }
+
     // function to draw the scene
     function drawScene() {
         
@@ -965,7 +1150,7 @@
 
         // Optional: Draw grid for debugging
         drawGrid();
-        drawGridClassification();
+        // drawGridClassification();
 
         // Draw agent trails and paths (if enabled)
         if (showAgentPaths) {
@@ -1026,6 +1211,28 @@
             ctx.beginPath();
             ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
             ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        // Visual indicators for water interaction modes (colored rings)
+        if (agentInput.waterInteraction.mode !== WATER_MODES.AVOIDING) {
+            ctx.beginPath();
+            ctx.arc(agentInput.x, agentInput.y, agentInput.radius + 3, 0, 2 * Math.PI);
+            
+            switch (agentInput.waterInteraction.mode) {
+                case WATER_MODES.SEEKING:
+                    ctx.strokeStyle = 'cyan'; // Blue ring when seeking water
+                    break;
+                case WATER_MODES.IN_WATER:
+                    ctx.strokeStyle = 'yellow'; // Yellow ring when in water
+                    break;
+                case WATER_MODES.RETURNING:
+                    ctx.strokeStyle = 'orange'; // Orange ring when returning
+                    break;
+            }
+            
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.closePath();
@@ -1144,7 +1351,7 @@
 
     // DEBUG: Draw agent path and targets for pathfinding visualization
     // COMMENTED OUT FOR PRODUCTION - Remove comments to enable debug visualization
-    /*
+
     function drawAgentPath(agent) {
         // Draw current target (final destination)
         if (agent.currentTarget) {
@@ -1194,7 +1401,7 @@
             ctx.stroke();
         }
     }
-    */
+
 
     // Function to handle d-EPR movement with pathfinding
     function handleDEPRMovement(agentInput) {
@@ -1243,6 +1450,45 @@
 
     // Function to update agent movement based on schedule
     function updateAgentMovement(agentInput) {
+        // PRIORITY 1: Handle water interaction (overrides all schedule behaviors)
+        if (agentInput.waterInteraction.mode === WATER_MODES.SEEKING) {
+            // Agent is seeking water for hydration/defecation
+            if (agentInput.waterInteraction.waterTarget) {
+                const reachedWater = moveTowardsWater(agentInput, agentInput.waterInteraction.waterTarget);
+                if (reachedWater) {
+                    // Agent reached water center, start staying timer
+                    agentInput.waterInteraction.mode = WATER_MODES.IN_WATER;
+                    agentInput.waterInteraction.waterStayTimer = 0;
+                    console.log(`Agent reached water center, staying for ${waterStayDuration} seconds`);
+                }
+            } else {
+                console.error("Agent in SEEKING mode but no water target set!");
+            }
+            return; // Skip normal movement logic when seeking water
+        }
+
+        if (agentInput.waterInteraction.mode === WATER_MODES.IN_WATER) {
+            // Agent is staying in water - no movement, handled by updateWaterInteraction
+            return;
+        }
+
+        if (agentInput.waterInteraction.mode === WATER_MODES.RETURNING) {
+            // Agent is returning to schedule after water interaction
+            // Use water-ignoring movement until first target is reached
+            if (agentInput.currentTarget) {
+                const reachedTarget = moveTowardsWater(agentInput, agentInput.currentTarget);
+                if (reachedTarget) {
+                    // Agent reached first target after water, switch back to avoiding mode
+                    agentInput.waterInteraction.mode = WATER_MODES.AVOIDING;
+                    agentInput.waterInteraction.waterTarget = null;
+                    agentInput.waterInteraction.satisfyingNeed = null;
+                    console.log("Agent finished water interaction, back to normal water-avoidance mode");
+                }
+            }
+            return; // Skip normal movement logic when returning from water
+        }
+
+        // PRIORITY 2: Normal schedule-based movement (only when not interacting with water)
         // get current schedule mode based on time
         const currentHour = timeManager.getCurrentHour();
         const newMode = getCurrentScheduleMode(currentHour); 
@@ -1570,6 +1816,9 @@
             // Update hydration and defecation needs
             updateHydrationNeeds(agent, deltaTime);
             updateDefecationNeeds(agent, deltaTime);
+            
+            // Update water interaction state and timer
+            updateWaterInteraction(agent, deltaTime);
             
             changeToExposed(agent);                         // to change from susceptible to exposed
             updateAgentMovement(agent);                     // to call control agent movement

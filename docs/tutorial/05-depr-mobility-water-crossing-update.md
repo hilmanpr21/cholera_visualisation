@@ -454,6 +454,14 @@ function isInWaterBody(x, y) {
 
 ### Step 1.3: Enhanced Grid Classification Function
 
+This step is to check 9 in the cell does in the water or not. Those 9 points are:
+
+-   4 corners
+
+-   4 middle point of cell edge
+
+-   center point
+
 Implement enhanced overlap detection that checks multiple points within each grid cell:
 
 ``` javascript
@@ -480,6 +488,7 @@ function cellOverlapsWater(gridX, gridY) {
         { x: cellRight, y: cellBottom }
     ];
 
+    // loop to check each corner
     for (const corner of corners) {
         if (isInWaterBody(corner.x, corner.y)) {
             return true;
@@ -494,6 +503,7 @@ function cellOverlapsWater(gridX, gridY) {
         { x: cellRight, y: cellCenterY }
     ];
 
+    //
     for (const midpoint of edgeMidpoints) {
         if (isInWaterBody(midpoint.x, midpoint.y)) {
             return true;
@@ -559,7 +569,7 @@ The pathfinding system uses a **hierarchical approach** with multiple fallback s
 
 #### Agent Water Overlap Detection
 
-This function determines if an agent at a given position would overlap with water:
+This function determines if an agent at a given position would overlap with water cells at given position or not:
 
 ``` javascript
 // Function to check if agent with buffer radius would overlap with water cells at given position
@@ -609,11 +619,193 @@ function agentWouldOverlapWater(x, y, agentRadius, bufferMultiplier = 1) {
 }
 ```
 
-**Key Features:** - Uses **1x agent radius** for precise collision detection (no excessive buffer) - **Grid-based checking** - examines all grid cells within agent's radius - **Distance calculation** to cell boundaries for accurate overlap detection
+**Key Features:**
 
-#### Path Collision Detection
+-   Decalring function to check i
 
-This function checks if a direct path between two points crosses water:
+-   Uses **1x agent radius** for precise collision detection (no excessive buffer)
+
+-   **Grid-based checking**
+
+-   examines all grid cells within agent's radius
+
+-   **Distance calculation** to cell boundaries for accurate overlap detection
+
+-   
+
+**Breakdown:**
+
+``` javascript
+function agentWouldOverlapWater(x, y, agentRadius, bufferMultiplier = 1) {...}
+```
+
+-   declaring function called `agentWouldOverlapWater`
+
+-   take parameter:
+
+    -   `x` → agent x-center point position
+
+    -   `y` → agent y-center point position
+
+    -   `agentRadius` → agent radius
+
+    -   `bufferMultiplier` → set as 1, meaning 1 times of the radius
+
+``` javascript
+        const effectiveRadius = agentRadius * bufferMultiplier;
+        
+        // Get all grid cells that the agent's effective radius might touch
+        const minGridX = Math.floor((x - effectiveRadius) / gridSize);
+        const maxGridX = Math.floor((x + effectiveRadius) / gridSize);
+        const minGridY = Math.floor((y - effectiveRadius) / gridSize);
+        const maxGridY = Math.floor((y + effectiveRadius) / gridSize);
+```
+
+-   `const effectiveRadius = agentRadius * bufferMultiplier` → set variable value of how big the radius we want to avoid `water` cells
+
+-   to get in which maximum and minimum cell grid is the agent located at that time
+
+-   result of `minGridX`. `maxGridX`, `minGridY`, and `maxGridY` are grid cell coordinate (not pixel coordinate)
+
+``` javascript
+ // Check each potentially affected grid cell
+        for (let gridX = minGridX; gridX <= maxGridX; gridX++) {
+            for (let gridY = minGridY; gridY <= maxGridY; gridY++) {
+                const cellKey = `${gridX},${gridY}`;
+                
+                // Skip cells outside the canvas
+                if (gridX < 0 || gridY < 0 || 
+                    gridX >= Math.ceil(canvas.width / gridSize) || 
+                    gridY >= Math.ceil(canvas.height / gridSize)) {
+                    continue;
+                }
+                
+                // If this cell is classified as water, check if agent would overlap with it
+                if (gridClassification[cellKey] === CELL_TYPES.WATER) {
+                    // Calculate cell boundaries
+                    const cellLeft = gridX * gridSize;
+                    const cellRight = (gridX + 1) * gridSize;
+                    const cellTop = gridY * gridSize;
+                    const cellBottom = (gridY + 1) * gridSize;
+                    
+                    // Check if agent's effective radius overlaps with this cell
+                    const closestX = Math.max(cellLeft, Math.min(x, cellRight));
+                    const closestY = Math.max(cellTop, Math.min(y, cellBottom));
+                    
+                    const distanceToCell = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+                    
+                    if (distanceToCell <= effectiveRadius) {
+                        return true; // Agent would overlap with this water cell
+                    }
+                }
+            }
+        }
+```
+
+-   This code is to check grid cell that potentially affected
+
+-   `for (let gridX = minGridX; gridX <= maxGridX; gridX++)` → looping for each X grid from minGridX to maxGridX value
+
+-   `for (let gridY = minGridY; gridY <= maxGridY; gridY++)` → looping for each Y grid from minGridY to maxGridY value
+
+-   const cellKey = `${gridX},${gridY}`; → save the cell coordinate into `cellKey`
+
+-   `if (gridX < 0 || gridY < 0 || gridX >= Math.ceil(canvas.width / gridSize) || gridY >= Math.ceil(canvas.height / gridSize)) { continue; }` →
+
+    -   this part is to skip checking cell that outside the canvas (less than grid 0 and higher than maximum cell in the canvas), this part is to prevent incase the agent is the cell outside the canvas (or the cell is in the edge of the canvas)
+
+    -   `continue` → means to continue the loop to the next value but passing the code in the loop after this condition check
+
+-   `if (gridClassification[cellKey] === CELL_TYPES.WATER)` → check if the `cellKey` in the `gridClassification` list is classified as `water` . In the next step, if the grid cell is `water` cell, the function will specifically check if agent would overlap with, like this
+
+    ``` javascript
+    // Calculate cell boundaries
+    const cellLeft = gridX * gridSize;
+    const cellRight = (gridX + 1) * gridSize;
+    const cellTop = gridY * gridSize;
+    const cellBottom = (gridY + 1) * gridSize;
+    ```
+
+    -   This code calculates the **pixel boundaries** of a grid cell in a 2D grid layout.
+
+    -   **gridX** and **gridY**: These are the cell's coordinates in the grid (horizontal and vertical index).
+
+    -   **gridSize**: The width and height of each cell (assuming square cells).
+
+    -   calculation:
+
+        -   [`cellLeft = gridX * gridSize`](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html): The left edge of the cell, measured from the grid's origin.
+
+        -   [`cellRight = (gridX + 1) * gridSize`](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html): The right edge of the cell, one cell width past the left edge.
+
+        -   [`cellTop = gridY * gridSize`](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html): The top edge of the cell.
+
+        -   [`cellBottom = (gridY + 1) * gridSize`](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html): The bottom edge of the cell.
+
+    -   the result is **pixel coordinate**
+
+    ``` javascript
+    // Check if agent's effective radius overlaps with this cell
+    const closestX = Math.max(cellLeft, Math.min(x, cellRight));
+    const closestY = Math.max(cellTop, Math.min(y, cellBottom));
+    ```
+
+    -   These line find the closest point on a cell's boundaries to the agent's position (`x`, `y` value)
+
+    -   This technique is often used to check if a circle (agent's effective radius) overlaps with a rectangle (cell). By finding the closest point on the rectangle to the circle's center, you can measure the distance and see if it's less than the radius.
+
+    -   `cellLeft`, `cellRight`, `cellTop`, and `cellBottom` → define the boundaries of rectangular cell
+
+    -   `x` and `y` → are agent's coordinate
+
+    -   `Math.min(x, cellRight)` → choose the minimum value between agent `x` coordinate or `cellRight` (the right edge of the cell)
+
+    -   `Math.max(cellLeft, ...)` → choose the maximum value between the `cellLeft` (the left edge of the cell) or the value from `Math.min(x, cellRight)`
+
+    -   The result is the closest point on the cell to the agent:
+
+        -   If the agent is inside the cell, `closestX` and `closestY` will just be the agent's own coordinates.
+
+        -   If the agent is outside, these will be the nearest edge or corner of the cell.
+
+    -   Example
+
+        -   Suppose:
+
+            -   [cellLeft = 0](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html), [cellRight = 10](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html), [cellTop = 0](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html), [cellBottom = 10](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html)
+
+            -   Agent center at (5, 10)
+
+        -   Then:
+
+            -   [closestX = Math.max(0, Math.min(12, 10)) = 10](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html)
+
+            -   [closestY = Math.max(0, Math.min(5, 10)) = 5](vscode-file://vscode-app/c:/Users/Hilman/AppData/Local/Programs/Microsoft%20VS%20Code/resources/app/out/vs/code/electron-browser/workbench/workbench.html)
+
+        -   So, the closest point on the cell to the agent is (10,5).
+
+    ``` javascript
+    const distanceToCell = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+
+    // check if the agent is inside the waterbody
+    if (distanceToCell <= effectiveRadius) {
+        return true; // Agent would overlap with this water cell
+    }
+    ```
+
+    -   `const distanceToCell = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY))` → calculate the distance between the agent center to the closest point
+
+    -   `if (distanceToCell <= effectiveRadius)` if the distance of the closes point to the agent center is less than the radius, it means some part of the agent is overlapped with the water cells, hence it returns `true`
+
+    ``` javascript
+    return false; // No overlap with water cells
+    ```
+
+-   the function will return `false` if there are no overlaps with water cells
+
+### Step 2.2: Path Collision with waterbody Detection
+
+This function checks if a direct path between two points (agent current position and target) crosses water:
 
 ``` javascript
 // Function to check if direct path crosses water with enhanced detection
@@ -639,11 +831,38 @@ function pathCrossesWater(startX, startY, targetX, targetY, agentRadius) {
 }
 ```
 
-**Algorithm Breakdown:** - **50-step sampling** provides detailed path checking - **Linear interpolation** creates evenly spaced checkpoints - **Agent radius consideration** ensures safe passage width
+**Algorithm Breakdown:**
 
-### Step 2.2: Waypoint Generation System
+-   **50-step sampling** provides detailed path checking
 
-#### Single Waypoint Navigation
+-   **Linear interpolation** creates evenly spaced checkpoints
+
+-   **Agent radius consideration** ensures safe passage width
+
+**breakdown:**
+
+1.  **Function Purpose**: Determines if a straight line path crosses any water body. Conceptually it breaks 10 steps between the start position (where the agent at that moment) to the target point. It will check if any of those path is on the waterbody or not
+2.  **Sampling Strategy**: Check 50 evenly spaced points along the path
+3.  **Loop Setup**: `for (let i = 0; i <= steps; i++)` - iterate through 11 points (0 to 10)
+4.  **Progress Calculation**: `const t = i / steps;` - creates values from 0.0 to 1.0
+    -   When i=0: t=0.0 (start point)
+    -   When i=5: t=0.5 (middle point)
+    -   When i=10: t=1.0 (end point)
+5.  **Linear Interpolation**: Calculate intermediate coordinates using formula:
+    -   `checkX = startX + t * (targetX - startX)` - X coordinate at position t
+    -   `checkY = startY + t * (targetY - startY)` - Y coordinate at position t
+6.  **Water Collision Check**: `if (agentWouldOverlapWater(checkX, checkY, agentRadius, bufferMultiplier))` - test if point is in water
+    -   \``if (agentWouldOverlapWater(checkX, checkY, agentRadius, bufferMultiplier))` → the condition will be run if `agentWouldOverlapWater(checkX, checkY, agentRadius, bufferMultiplier)` return `true`
+7.  **Early Return**: If any point touches water, immediately return `true`
+8.  **Clear Path**: If all points are safe, return `false` (path is clear)
+9.  return `true` → if at any point from the start to the target point there is water body.
+10. return `false` → it the path between start to the target point is clear without any waterbody
+
+**Mathematical Concept**: Linear interpolation between two points
+
+### Step 2.3: Waypoint Generation System
+
+#### Step 2.3.1: Single Waypoint Navigation
 
 For simple obstacles, find one intermediate waypoint:
 
@@ -686,9 +905,125 @@ function findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius) 
 }
 ```
 
-**Strategy:** - **Midpoint calculation** estimates obstacle center - **8 directional angles** provide comprehensive coverage - **3 distance options** handle different obstacle sizes - **Dual path validation** ensures complete route safety
+**Strategy:**
 
-#### Multi-Waypoint Pathfinding
+-   **Midpoint calculation** estimates obstacle center
+
+-   **8 directional angles** (45, -45, 90, -90, 135, -135, 180, 0 degree) provide comprehensive coverage
+
+-   **3 distance options** (80, 120, 160 pixels) handle different obstacle sizes
+
+-   **Dual path validation** ensures complete route safety
+
+**Breakdown:**
+
+1.  **Declaring function**
+
+``` javascript
+function findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius) {...}
+```
+
+-   Declaring function called `findWaypointAroundWater`
+
+-   with parameter `(startX, startY, targetX, targetY, agentRadius)`
+
+2.  **Calculate the midpoint between start and targer**
+
+``` javascript
+// Calculate midpoint between start and target
+const midX = (startX + targetX) / 2;
+const midY = (startY + targetY) / 2;
+```
+
+3.  **declare 8 angles and 3 distance to try**
+
+``` javascript
+const angles = [Math.PI/4, -Math.PI/4, Math.PI/2, -Math.PI/2, 3*Math.PI/4, -3*Math.PI/4, Math.PI, 0];
+const distances = [80, 120, 160]; // Different distances to try
+```
+
+-   declare array `angles` and `distance`
+
+-   `angles` → 45, -45, 90, -90, 135, -135, 180, 0 degree
+
+-   \`distance → 80, 120, 160
+
+4.  **loop to check each combination of distance and angle to find the first suitable waypoint to avoid waterbody in the path**
+
+``` javascript
+for (const distance of distances) {
+    for (const angle of angles) {
+        const waypointX = midX + Math.cos(angle) * distance;
+        const waypointY = midY + Math.sin(angle) * distance;
+        
+        // Check if waypoint is within canvas boundaries
+        if (waypointX < agentRadius * 2 || waypointX > canvas.width - agentRadius * 2 || 
+            waypointY < agentRadius * 2 || waypointY > canvas.height - agentRadius * 2) {
+            continue;
+        }
+        
+        // Check if waypoint itself would overlap water
+        if (agentWouldOverlapWater(waypointX, waypointY, agentRadius, 1)) {
+            continue;
+        }
+        
+        // Check if paths to and from waypoint are clear
+        if (!pathCrossesWater(startX, startY, waypointX, waypointY, agentRadius) &&
+            !pathCrossesWater(waypointX, waypointY, targetX, targetY, agentRadius)) {
+            return { x: waypointX, y: waypointY };
+        }
+    }
+}
+```
+
+-   `for (const distance of distances)` → loop for each declared distance array
+
+-   `for (const angle of angles)` → loop for declared each angles
+
+-   calculate waypoint which
+
+    ``` javascript
+    const waypointX = midX + Math.cos(angle) * distance;
+    const waypointY = midY + Math.sin(angle) * distance
+    ```
+
+    -   this code to calculate the waypoint coordinate using trigonometry
+
+    -   as result, it will give X and Y value of the mid point
+
+-   `if (waypointX < agentRadius * 2 || waypointX > canvas.width - agentRadius * 2 || waypointY < agentRadius * 2 || waypointY > canvas.height - agentRadius * 2) { continue; }`
+
+    -   to check if the waypoint is still within the canvas.
+
+    -   using \``agentRadius * 2` to ensure agent is still visualised within the canvas
+
+    -   \``waypointX < agentRadius * 2` →to check the waypoint X is not smaller than 2 time radius
+
+    -   `continue` → to skip the rest of the iteration and imidiately moove to the next iteration
+
+    -   if the waypoint is fulfilling this condition, it reject the waypoint and continue to the next iteration
+
+-   `if (agentWouldOverlapWater(waypointX, waypointY, agentRadius, 1)) { continue; }`
+
+    -   to check whether the waypoint is inside the waterbody or not
+
+    -   If the function returns `true`, meaning the waypoint is inside the water body, then continue to the next iteration
+
+-   `if (!pathCrossesWater(startX, startY, waypointX, waypointY, agentRadius) && !pathCrossesWater(waypointX, waypointY, targetX, targetY, agentRadius)) { return { x: waypointX, y: waypointY }; }`
+
+    -   to check if the path from start to wayfindind and from wayfinding to target point are clear from waterboody or not
+
+    -   if both condition checkiong return `false` meaning there are no waterbody in the path, then it will **return the waypoint coordinate** and get out of the iteration
+
+5.  **If there are no clear waypoint with combination of 8 angles and 3 direction**
+
+``` javascript
+return null;
+```
+
+-   No suitable waypoint will return `null`
+
+#### Step 2.3.2: Multi-Waypoint Pathfinding
 
 For complex water bodies, generate multiple intermediate waypoints:
 
@@ -725,9 +1060,182 @@ function findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius, ma
 }
 ```
 
-**Progressive Strategy:** - **Iterative waypoint generation** builds path step by step - **Target accessibility check** at each waypoint - **Maximum 3 waypoints** prevents infinite loops - **Partial path acceptance** provides progress even when incomplete
+**Progressive Strategy:**
 
-#### Fallback Navigation
+-   **Iterative waypoint generation** builds path step by step
+
+-   **Target accessibility check** at each waypoint
+
+-   **Maximum 3 waypoints** prevents infinite loops
+
+-   **Partial path acceptance** provides progress even when incomplete
+
+**Breakdown**
+
+1.  **Declaring function and parameter**
+
+    ``` javascript
+    function findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius, maxWaypoints = 3) {...}
+    ```
+
+    -   Declaring function called `findMultipleWaypoints`
+
+    -   set input parameter `(startX, startY, targetX, targetY, agentRadius, maxWaypoints = 3)`
+
+        -   set `maxWaypoints` as `3`
+
+2.  **Assign empty array to store waypoint**
+
+    ``` javascript
+    const waypoints = [];
+    let currentX = startX;
+    let currentY = startY;
+    ```
+
+    -   `const waypoints = [];` → assigning empty array to store waypoint
+
+    -   `let currentX = startX;` & `let currentY = startY;`→ define the current agent position
+
+3.  **Find Waypoints iteratively**
+
+    ``` javascript
+    for (let i = 0; i < maxWaypoints; i++) {
+        // Try to find a waypoint from current position towards target
+        const waypoint = findWaypointAroundWater(currentX, currentY, targetX, targetY, agentRadius);
+
+        if (!waypoint) {
+            break; // No more waypoints found
+        }
+
+        waypoints.push(waypoint);
+
+        // Check if we can reach target from this waypoint
+        if (!pathCrossesWater(waypoint.x, waypoint.y, targetX, targetY, agentRadius)) {
+            // Found a complete path!
+            return waypoints;
+        }
+
+        // Move to this waypoint and try to find the next one
+        currentX = waypoint.x;
+        currentY = waypoint.y;
+    }
+    ```
+
+    detailed breakdown:
+
+    a\. **Loop initialization**
+
+    ``` javascript
+    for (let i = 0; i < maxWaypoints; i++) {
+    ```
+
+    -   **Purpose**: Loop up to 3 times maximum (maxWaypoints = 3)
+
+    -   **Why limit**: Prevents infinite loops and keeps pathfinding efficient
+
+    -   **`i`**: Current iteration counter (0, 1, 2)
+
+    b\. **Find the Next Pathway**
+
+    ``` javascript
+    const waypoint = findWaypointAroundWater(currentX, currentY, targetX, targetY, agentRadius);
+    ```
+
+    -   declare function called `waypoint`
+
+    -   calling function `findWaypointAroundWater` to find single waypoint that is not crossing waterbody from the current agent location to the target
+
+    -   Parameters:
+
+        -   `currentX, currentY`: Agent's current position (starts at startX, startY, then updates)
+        -   `targetX, targetY`: Final destination (never changes)
+        -   `agentRadius`: Agent size for collision checking
+
+    -   **Return Value**: Either waypoint object `{x: number, y: number}` or `null` if no waypoint found. So `waypoint` can be valued `(x,y)` or `null`
+
+    c\. **Handle** **if no Waypointfound**
+
+    ``` javascript
+    if (!waypoint) {
+        break; // No more waypoints found
+    }
+    ```
+
+    -   `!waypoint` → meaning the `waypoint` value is `null`, meaning no waypoint found. this happens because the water obstacle is too complex
+
+    -   Action: `break` exits the for-loop immediately
+
+    -   Result: Function returns whatever waypoints were found so far (partial path)
+
+    d\. **Store Valid Waypoint**
+
+    ``` javascript
+    waypoints.push(waypoint);
+    ```
+
+    -   This is the conddition where `waypoint` has value `(x,y)`
+
+    -   the value will be added to the array `waypoints`
+
+    -   `.push` is a javascript methods to add one or more elements to the end of an array
+
+    -   Array Growth: `waypoints` grows from \[\] → \[waypoint1\] → \[waypoint1, waypoint2\] → etc.
+
+    e\. **Check if path from the agent current location to the target is clear from the waterbody**
+
+    ``` javascript
+    if (!pathCrossesWater(waypoint.x, waypoint.y, targetX, targetY, agentRadius)) {
+        // Found a complete path!
+        return waypoints;
+    }
+    ```
+
+    -   This code is to check if the agent `waypoint` location to the target is clear from waterbody, so the agent doesn't need to iterate the next waydfinding
+
+    -   `!pathCrossesWater(waypoint.x, waypoint.y, targetX, targetY, agentRadius`→ calling the function `pathCrossesWater` tests if direct path from waypoint to final target crosses water.
+
+    -   The function return `true` when the path is crossing waterbody, and return `false` if the path clear
+
+    -   `!pathCrossesWater()` → meaning path does not cross water. This determines if we can complete the journey from this waypoint
+
+    -   `return waypoints` → Exits function immediately with current `waypoints` array
+
+    -   Result: Returns array like `[waypoint1, waypoint2]` where agent can go: start → waypoint1 → waypoint2 → target
+
+    f\. **Set the last `waypouint` as the current agent location for the next iteration**
+
+    ``` javascript
+    // Move to this waypoint and try to find the next one
+    currentX = waypoint.x;
+    currentY = waypoint.y;
+    ```
+
+    -   Assign the latest `waypoint` as `currentX` and `currentY` to make it as the new starting point for the next iteration to find waypoint avoiding waterbody
+
+    -   Next loop will search from this waypoint toward target
+
+    -   `currentX, currentY` now represent agent's "virtual position" at this waypoint
+
+    g\. **Visual Explanation**
+
+    ``` plaintext
+    Iteration 1: Agent at START, finds WAYPOINT1
+    START -----> WAYPOINT1 .... [water] .... TARGET
+                 (currentX, currentY updated to WAYPOINT1)
+
+    Iteration 2: Agent "at" WAYPOINT1, finds WAYPOINT2  
+    START -----> WAYPOINT1 -----> WAYPOINT2 .... [water] .... TARGET
+                                   (currentX, currentY updated to WAYPOINT2)
+
+    Iteration 3: Agent "at" WAYPOINT2, finds WAYPOINT3
+    START -----> WAYPOINT1 -----> WAYPOINT2 -----> WAYPOINT3 --CLEAR--> TARGET
+                                                   (Path complete! Return waypoints)
+
+    Final Result: [WAYPOINT1, WAYPOINT2, WAYPOINT3]
+    Agent will follow: START → WAYPOINT1 → WAYPOINT2 → WAYPOINT3 → TARGET
+    ```
+
+#### Step 2.3.3: Fallback Navigation
 
 When standard pathfinding fails, find any safe waypoint in the general direction:
 
@@ -775,7 +1283,272 @@ function findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius) {
 }
 ```
 
-**Adaptive Strategy:** - **Direction vector calculation** maintains general heading toward target - **Multiple test distances** find optimal progress distance - **Perpendicular variations** explore alternative routes when direct path fails
+**Adaptive Strategy:**
+
+-   This is becoming the last-resort pathfinding when single and multiple waypoint methods fail
+
+-   **Direction vector calculation** maintains general heading toward target
+
+-   **Multiple test distances** find optimal progress distance
+
+-   **Perpendicular variations** explore alternative routes when direct path fails
+
+**Detailed Line-by-Line Breakdown:**
+
+1.  **Function Declaration**
+
+    ``` javascript
+    function findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius) {...}
+    ```
+
+    -   declaring function called `findFallbackWaypoint`
+
+    -   The result return a single waypoint that gets agent closer to target, or null if impossible
+
+2.  **Calculate Vector Direction**
+
+    ``` javascript
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    ```
+
+    -   calculate vector direction using pythagoran theoram
+
+    -   `distance` → is the total vector distance from agent starting position to Pythagoran theoram
+
+3.  **Handle if agent already in the target Location**
+
+    ``` javascript
+    if (distance === 0) return null;
+    ```
+
+    -   `distance === 0` → distance value is `0` this means the agent is already in the target position
+
+    -   `return null` → exit the function immediately as the agent does not need fallback
+
+    -   code technicality → `return null` does not need curly braces `{}` because `return` statement itself does not require curly braces and the action is nor blocks of code
+
+4.  **Normalise Direction**
+
+    ``` javascript
+    const dirX = dx / distance;
+    const dirY = dy / distance;
+    ```
+
+    -   to normalise the direction while maintaining the angle towards the locations
+
+    -   `dirX = dx / distance` → basically calculating cosine of the angle to the target
+
+    -   `dirY = dy / distance` → basically calculating sine of the angle to the target
+
+    -   This creates unit vector (length = 1) pointing from agent starting position to the target
+
+    -   Direction Preservation: Maintains angle toward target
+
+    -   Scale Independence: Works regardless of actual distance to target
+
+5.  **Define test Distance**
+
+    ``` javascript
+    const testDistances = [50, 80, 120, 160, 200];
+    ```
+
+    -   `testDistances` → an array that store the multiple distance we will test to find waypoint
+
+    -   Progressive Distances: Start close, gradually try farther waypoints
+
+    -   Range Coverage: From 50 to 200 pixels covers typical obstacle sizes
+
+    -   Flexibility: Multiple options increase chance of finding valid waypoint
+
+6.  **Test Each Distance**
+
+    ``` javascript
+    for (const testDist of testDistances) {
+        // Try the main direction and some variations
+        const variations = [
+            { x: startX + dirX * testDist, y: startY + dirY * testDist },
+            { x: startX + dirX * testDist + dirY * 40, y: startY + dirY * testDist - dirX * 40 }, // perpendicular offset
+            { x: startX + dirX * testDist - dirY * 40, y: startY + dirY * testDist + dirX * 40 }, // perpendicular offset other way
+        ];
+
+        for (const point of variations) {
+            // Check bounds
+            if (point.x < agentRadius * 2 || point.x > canvas.width - agentRadius * 2 || 
+                point.y < agentRadius * 2 || point.y > canvas.height - agentRadius * 2) {
+                continue;
+            }
+
+            // Check if point is safe and reachable
+            if (!agentWouldOverlapWater(point.x, point.y, agentRadius) &&
+                !pathCrossesWater(startX, startY, point.x, point.y, agentRadius)) {
+                return point;
+            }
+        }
+    }
+    ```
+
+    a\. **Loop Initiation**
+
+    ``` javascript
+    for (const testDist of testDistances) {...}
+    ```
+
+    -   Looping try each distance in `testDistances` array
+
+    -   It will stop when first valid waypoint is found
+
+    b\. **Generate Waypoiunt Variation**
+
+    ``` javascript
+    const variations = [
+        { x: startX + dirX * testDist, y: startY + dirY * testDist },
+        { x: startX + dirX * testDist + dirY * 40, y: startY + dirY * testDist - dirX * 40 }, // perpendicular offset
+        { x: startX + dirX * testDist - dirY * 40, y: startY + dirY * testDist + dirX * 40 }, // perpendicular offset other way
+    ];
+    ```
+
+    -   `variations` → is an array `[...]` of object `{..}`
+
+    -   Each element of the array is an object with `x` and `y` properties as pixel coordinate
+
+    -   Variation 1:
+
+        -   This is to try the most direct route first
+
+        -   `x: startX + dirX * testDist` → to move `testDist` pixels towards target in X
+
+        -   `y: startY + dirY * testDist` → to move `testDist` pixels towards target in Y
+
+    -   Variation 2:
+
+        -   This is to try 40-pixel perpendicular offset (**clockwise** from target direction)
+
+        -   `x: startX + dirX * testDist + dirY * 40` = `x:(variation1)+(dirY+40)` → to offset +90° and 40 pixels away in x direction
+
+        -   `y: startY + dirY * testDist - dirX * 40` = `y: (variation 1) - (dirX * 40)`→ to offset +90° and 40 pixels away in y direction from the variation 1
+
+    -   Variation 3:
+
+        -   This is to try 40-pixel perpendicular offset (**counter** **clockwise** from target direction)
+
+        -   `x: startX + dirX * testDist - dirY * 40` = `x:(variation 1) - (dirY * 40)` → to offset -90° and 40 pixels away in x direction
+
+        -   `y: startY + dirY * testDist + dirX * 40` = `y: (variation 1) + (dirX * 40)`→ to offset -90° and 40 pixels away in y direction from the variation 1
+
+    -   How the variation logic works?
+
+        -   The idea is to rotate the variation 1 by 90 degrees
+
+            ``` plaintext
+            Original vector: (dirX, dirY)
+            Rotated +90°:    (-dirY, dirX)
+            Rotated -90°:    (dirY, -dirX)
+            ```
+
+        -   Mathemathical explanation
+
+            -   dirX = cosine angle theta `θ`
+
+            -   dirY = sine angle theta `θ`
+
+            -   `new_X = cos(θ + 90°) = -sin(θ) = -dirY`
+
+            -   `new_Y = sin(θ + 90°) = cos(θ) = dirX`
+
+        -   so it will be
+
+            ``` plaintext
+                             Variation 2
+                                 ↗ (+dirY, -dirX)
+                                /
+                               /
+            Agent ---------> Target (Main direction: dirX, dirY)
+                               \
+                                \
+                                 ↘ Variation 3
+                              (-dirY, +dirX)
+            ```
+
+            -   So it will create perpendicular value offset as variation 2 and 3
+
+    -   Why 40 pixels?
+
+        -   The 40 pixels is the lateral offset distance
+
+        -   Large enough to clear typical water obstacles (radius \~20-40px)
+
+        -   Small enough to not deviate too far from optimal path
+
+    c\. **Test Each Variation**
+
+    ``` javascript
+    for (const point of variations) {..}
+    ```
+
+    -   looping to test direct route (variation1), and both perpendicular offsets (variation 2&3)
+
+    -   `point` is the variable for the variation value which has `x` and `y` value
+
+    d\. **Boundary Validation**
+
+    ``` javascript
+    if (point.x < agentRadius * 2 || point.x > canvas.width - agentRadius * 2 || 
+        point.y < agentRadius * 2 || point.y > canvas.height - agentRadius * 2) {
+        continue;
+    }
+    ```
+
+    -   to check if the point `(x,y)` in each variation is still within the canvas boundary, so the agent will not go outside the boundary
+
+    -   `continue` → to continue or skip to the next iteration meaning the point is outside the boundaries
+
+    -   if the condition not fulfilled,do the next step in the loop
+
+    e\. **Check if the waypoint is not in the water and the path from agent position to the waypoint is not crossing waterbody**
+
+    ``` javascript
+    if (!agentWouldOverlapWater(point.x, point.y, agentRadius) &&
+        !pathCrossesWater(startX, startY, point.x, point.y, agentRadius)) {
+        return point;
+    }
+    ```
+
+    -   `!agentWouldOverlapWater()` → ensures waypoint is on land
+
+    -   `!pathCrossesWater()` → ensures route to waypoint is clear
+
+    -   `return point` → First valid waypoint is immediately returned
+
+7.  **No Fallback found**
+
+    ``` javascript
+    return null; // No fallback found
+    ```
+
+    -   No valid waypoint found at any distance or variation
+
+8.  **Visual Example of Fallback Strategy**
+
+    ``` javascript
+    Agent at START, Target blocked by complex water:
+
+         TARGET
+            ^
+            |  [WATER OBSTACLE]
+            |  [    COMPLEX    ]
+            |  [   FORMATION   ]
+            |
+         START
+
+    Fallback tests waypoints at increasing distances:
+    Distance 50:  Tests [Direct, Left offset, Right offset]
+    Distance 80:  Tests [Direct, Left offset, Right offset]  ← FOUND VALID!
+    Distance 120: (skipped - already found waypoint)
+
+    Result: Agent moves to waypoint 80 pixels toward target with offset
+    ```
 
 ### Step 2.3: Main Pathfinding Function
 
@@ -816,7 +1589,149 @@ function findPathAroundWater(startX, startY, targetX, targetY, agentRadius) {
 }
 ```
 
-**Hierarchical Decision Process:** 1. **Optimization first**: Try direct path (fastest) 2. **Simple solution**: Single waypoint for basic obstacles 3. **Complex navigation**: Multi-waypoint for challenging terrain 4. **Progress guarantee**: Fallback ensures some movement 5. **Safety net**: Direct path prevents agent lockup
+**Hierarchical Decision Process:**
+
+1\. **Optimization first**: Try direct path (fastest)
+
+2\. **Simple solution**: Single waypoint for basic obstacles
+
+3\. **Complex navigation**: Multi-waypoint for challenging terrain
+
+4\. **Progress guarantee**: Fallback ensures some movement
+
+5\. **Safety net**: Direct path prevents agent lockup
+
+**Detailed Line-by-Line Breakdown:**
+
+1.  **Function Declaration**
+
+    ``` javascript
+    function findPathAroundWater(startX, startY, targetX, targetY, agentRadius) {
+    ```
+
+    -   function called `findPathAroundWater`
+
+    -   Parameter `(startX, startY, targetX, targetY, agentRadius)`
+
+2.  **Direct Path Optimisation**
+
+    ``` javascript
+    if (!pathCrossesWater(startX, startY, targetX, targetY, agentRadius)) {
+        // Direct path is clear
+        return [{ x: targetX, y: targetY }];
+    }
+    ```
+
+    -   check if direct path is clear
+
+    -   `!pathCrossesWater` → function return `false` if path is clear from the waterbody
+
+    -   `return [{ x: targetX, y: targetY }]` → will immediately exit the function with `x,y` value is the target coordinate
+
+3.  **Single waypoint Strategy**
+
+    ``` javascript
+    const singleWaypoint = findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius);
+    if (singleWaypoint) {
+        return [singleWaypoint, { x: targetX, y: targetY }];
+    }
+    ```
+
+    -   At this point, the direct path to the target isn't clear from waterbody
+
+    -   `const singleWaypoint = findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius);`
+
+        -   `singleWaypoint` → declare object to find single waypoint pathfinding to avoid waterbody
+
+        -   `findWaypointAroundWater` will return coordinate value `x,y` or `null`
+
+    -   `` `if (singleWaypoint)` `` → check if the `singleWaypoint` value exist and not null
+
+    -   `return [singleWaypoint, { x: targetX, y: targetY }]` → exit the function and return with an array of single waypoint coordinate and target coordinate. example: `[{30,20}, {46,57}]`, `{30,20}` is the single waypoint, `(46,57)` is thetarget coordinate
+
+4.  **Multi-Waypoint Strategy**
+
+    ``` javascript
+    const multiWaypoints = findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius);
+    if (multiWaypoints && multiWaypoints.length > 0) {
+        // Add final target to the end
+        multiWaypoints.push({ x: targetX, y: targetY });
+        return multiWaypoints;
+    }
+    ```
+
+    -   Agent got into this point of calculation when single waypoint (`findWaypointAroundWater`) rerun `null`, meaning the path should be finished with more than single waypoint.
+
+    -   `const multiWaypoints = findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius);`
+
+        -   `multiWaypoints` → declare object to find multiple waypoint pathfinding to avoid waterbody. Result is an array of coordinate
+
+        -   `findMultipleWaypoints` → will return array of coordinate value `x,y` or `null` when agent cannot find pathfinding
+
+    -   `if (multiWaypoints && multiWaypoints.length > 0)`
+
+        -   check if \``multiWaypoints` is not null and
+
+        -   `multiWaypoints.length > 0` not an empty array
+
+    -   `multiWaypoints.push({ x: targetX, y: targetY });` → add the target coordinate to the end of the array so after the last waypoint, agent will move to the target.
+
+    -   `return multiWaypoints;` → exit the function and return with array of waypoint coordinate
+
+5.  **Fallback Strategy**
+
+    ``` javascript
+    const fallbackWaypoint = findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius);
+    if (fallbackWaypoint) {
+        return [fallbackWaypoint];
+    }
+    ```
+
+    -   Agent got into this point when it cannot find single nor multiple waypoint
+
+    -   `const fallbackWaypoint = findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius);`
+
+        -   declare object called `fallbackWaypoint` with the return value is a single waypoint or null
+
+    -   `if (fallbackWaypoint)` meaning `fallbackWaypoint` has point value.
+
+    -   `return [fallbackWaypoint];` → will return only the fallback waypoint coordinate without the target. Without the target because once the agent got into the point it will recalculate new path to the target.
+
+6.  **Emergency Direct Path**
+
+    ``` javascript
+    // Last resort: direct path (agent will have to cross water)
+    console.warn("No clear path found, using direct route");
+    return [{ x: targetX, y: targetY }];
+    ```
+
+    -   if agent cannot find single waypoint, multiple waypoint or fallback waypoint. the last source is agent go to the target directly.
+
+7.  **Decision Visualisation**
+
+    ``` plaintext
+    findPathAroundWater() Decision Flow:
+
+    START
+      │
+      ├─ Direct Path Clear? 
+      │    ├─ YES → Return [target]                    (85% of cases)
+      │    └─ NO ↓
+      │
+      ├─ Single Waypoint Found?
+      │    ├─ YES → Return [waypoint, target]          (10% of cases)
+      │    └─ NO ↓
+      │
+      ├─ Multiple Waypoints Found?
+      │    ├─ YES → Return [wp1, wp2, wp3, target]     (4% of cases)
+      │    └─ NO ↓
+      │
+      ├─ Fallback Waypoint Found?
+      │    ├─ YES → Return [fallback_waypoint]         (0.9% of cases)
+      │    └─ NO ↓
+      │
+      └─ Emergency: Return [target]                    (0.1% of cases)
+    ```
 
 ------------------------------------------------------------------------
 

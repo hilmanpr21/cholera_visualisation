@@ -201,6 +201,39 @@
         return false; // No overlap detected
     }
 
+    // declare function to classify all grid cells by classification type
+    function classifyGridCells() {
+        // Calculate how many grid in the canvas
+        const gridWidth = Math.ceil(canvas.width / gridSize); // calculate how many grid cells fit across (columns)
+        const gridHeight= Math.ceil(canvas.height / gridSize); // calculate how many grid cells frit down (row)
+
+        console.log(`Classifying ${gridWidth}x${gridHeight} grid cells with enhanced overlap detection...`);
+
+        // Make a loop to assign grid cell classification one by one
+        for (let x = 0; x < gridWidth; x++) {
+            for (let y = 0; y < gridHeight; y++) {
+                const cellKey = `${x},${y}`;
+
+                // Check if any part of the cell overlaps with water bodies
+                // This includes center point, corners, and edge midpoints
+                if (cellOverlapsWater(x, y)) {
+                    // if any part of the cell overlaps with water, classify as water
+                    gridClassification[cellKey] = CELL_TYPES.WATER;
+                } else {
+                    // if no part of the cell overlaps with water, classify as accessible
+                    gridClassification[cellKey] = CELL_TYPES.ACCESSIBLE;
+                }
+            }
+        }
+
+        // Count and log classification results
+        const waterCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.WATER).length;
+        const accessibleCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.ACCESSIBLE).length;
+        console.log(`Grid classification complete: ${accessibleCells} accessible, ${waterCells} water cells`);
+        console.log(`Enhanced overlap detection: checking center + 4 corners + 4 edge midpoints per cell`);
+    }
+
+
     // Function to check if agent with buffer radius would overlap with water cells at given position
     function agentWouldOverlapWater(x, y, agentRadius, bufferMultiplier = 1) {
         const effectiveRadius = agentRadius * bufferMultiplier;
@@ -237,6 +270,7 @@
                     
                     const distanceToCell = Math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
                     
+                    // check if the agent is inside the waterbody
                     if (distanceToCell <= effectiveRadius) {
                         return true; // Agent would overlap with this water cell
                     }
@@ -245,39 +279,6 @@
         }
         
         return false; // No overlap with water cells
-    }
-
-    // Function to check if agent's perimeter would overlap with water cells in real-time
-    // Uses SAME buffer as path planning to ensure consistency
-    function agentPerimeterOverlapsWater(x, y, agentRadius, bufferMultiplier = 1) {
-        const checkRadius = agentRadius * bufferMultiplier; // Use 1.5x radius - less aggressive than path planning
-        const numSamples = 12; // Reduced from 16 for better performance
-        
-        // Sample points around the agent's perimeter
-        for (let i = 0; i < numSamples; i++) {
-            const angle = (i / numSamples) * 2 * Math.PI;
-            const checkX = x + Math.cos(angle) * checkRadius;
-            const checkY = y + Math.sin(angle) * checkRadius;
-            
-            // Check if this perimeter point is in a water grid cell
-            const gridX = Math.floor(checkX / gridSize);
-            const gridY = Math.floor(checkY / gridSize);
-            const cellKey = `${gridX},${gridY}`;
-            
-            // Skip if outside canvas bounds
-            if (gridX < 0 || gridY < 0 || 
-                gridX >= Math.ceil(canvas.width / gridSize) || 
-                gridY >= Math.ceil(canvas.height / gridSize)) {
-                continue;
-            }
-            
-            // If any perimeter point is in water cell, return true
-            if (gridClassification[cellKey] === CELL_TYPES.WATER) {
-                return true;
-            }
-        }
-        
-        return false; // No perimeter overlap with water
     }
 
     // Function to check if direct path crosses water with enhanced detection
@@ -308,7 +309,8 @@
         // Try waypoints at different angles and distances around the obstacle
         const angles = [Math.PI/4, -Math.PI/4, Math.PI/2, -Math.PI/2, 3*Math.PI/4, -3*Math.PI/4, Math.PI, 0];
         const distances = [80, 120, 160]; // Different distances to try
-        
+    
+        //  loop to check each combination of distance and angle to find the first suitable waypoint to avoid waterbody in the path
         for (const distance of distances) {
             for (const angle of angles) {
                 const waypointX = midX + Math.cos(angle) * distance;
@@ -336,62 +338,34 @@
         return null; // No suitable waypoint found
     }
 
-    // Function for pathfinding to avoid water bodies
-    function findPathAroundWater(startX, startY, targetX, targetY, agentRadius) {
-        // Check if direct path is clear
-        if (!pathCrossesWater(startX, startY, targetX, targetY, agentRadius)) {
-            // Direct path is clear
-            return [{ x: targetX, y: targetY }];
-        }
-        
-        // Try single waypoint first (faster for simple obstacles)
-        const singleWaypoint = findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius);
-        if (singleWaypoint) {
-            return [singleWaypoint, { x: targetX, y: targetY }];
-        }
-        
-        // For complex water bodies, try multi-waypoint pathfinding
-        const multiWaypoints = findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius);
-        if (multiWaypoints && multiWaypoints.length > 0) {
-            // Add final target to the end
-            multiWaypoints.push({ x: targetX, y: targetY });
-            return multiWaypoints;
-        }
-        
-        // Fallback: try to get closer by finding a waypoint towards the target
-        const fallbackWaypoint = findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius);
-        if (fallbackWaypoint) {
-            return [fallbackWaypoint];
-        }
-        
-        // Last resort: direct path (agent will have to cross water)
-        console.warn("No clear path found, using direct route");
-        return [{ x: targetX, y: targetY }];
-    }
-
     // New function to find multiple waypoints for complex water navigation
     function findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius, maxWaypoints = 3) {
+        
+        // assign empty array to store waypoints
         const waypoints = [];
         let currentX = startX;
         let currentY = startY;
         
+        // Loop to find waypoints iteratively
         for (let i = 0; i < maxWaypoints; i++) {
             // Try to find a waypoint from current position towards target
             const waypoint = findWaypointAroundWater(currentX, currentY, targetX, targetY, agentRadius);
             
+            // If no waypoint found (waypoint=null), break the loop
             if (!waypoint) {
                 break; // No more waypoints found
             }
-            
+           
+            // add sinle waypoint to the waypoints array
             waypoints.push(waypoint);
             
-            // Check if we can reach target from this waypoint
+            // Check if we can reach target from this waypoint withour crossing water
             if (!pathCrossesWater(waypoint.x, waypoint.y, targetX, targetY, agentRadius)) {
                 // Found a complete path!
                 return waypoints;
             }
             
-            // Move to this waypoint and try to find the next one
+            // Move to last waypoint as the new current position and try to find the next one
             currentX = waypoint.x;
             currentY = waypoint.y;
         }
@@ -409,7 +383,7 @@
         
         if (distance === 0) return null;
         
-        // Normalize direction
+        // Normalize direction, calculate sine and cosine
         const dirX = dx / distance;
         const dirY = dy / distance;
         
@@ -442,40 +416,51 @@
         return null; // No fallback found
     }
 
-    // declare function to classify all grid cells by classification type
-    function classifyGridCells() {
-        // Calculate how many grid in the canvas
-        const gridWidth = Math.ceil(canvas.width / gridSize); // calculate how many grid cells fit across (columns)
-        const gridHeight= Math.ceil(canvas.height / gridSize); // calculate how many grid cells frit down (row)
-
-        console.log(`Classifying ${gridWidth}x${gridHeight} grid cells with enhanced overlap detection...`);
-
-        // Make a loop to assign grid cell classification one by one
-        for (let x = 0; x < gridWidth; x++) {
-            for (let y = 0; y < gridHeight; y++) {
-                const cellKey = `${x},${y}`;
-
-                // Check if any part of the cell overlaps with water bodies
-                // This includes center point, corners, and edge midpoints
-                if (cellOverlapsWater(x, y)) {
-                    // if any part of the cell overlaps with water, classify as water
-                    gridClassification[cellKey] = CELL_TYPES.WATER;
-                } else {
-                    // if no part of the cell overlaps with water, classify as accessible
-                    gridClassification[cellKey] = CELL_TYPES.ACCESSIBLE;
-                }
-            }
+    // Function for pathfinding to avoid water bodies
+    function findPathAroundWater(startX, startY, targetX, targetY, agentRadius) {
+        // Check if direct path is clear
+        if (!pathCrossesWater(startX, startY, targetX, targetY, agentRadius)) {
+            // Direct path is clear
+            return [{ x: targetX, y: targetY }];        // return direct target as the only waypoint
         }
-
-        // Count and log classification results
-        const waterCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.WATER).length;
-        const accessibleCells = Object.values(gridClassification).filter(type => type === CELL_TYPES.ACCESSIBLE).length;
-        console.log(`Grid classification complete: ${accessibleCells} accessible, ${waterCells} water cells`);
-        console.log(`Enhanced overlap detection: checking center + 4 corners + 4 edge midpoints per cell`);
+        
+        // Try single waypoint first (faster for simple obstacles)
+        const singleWaypoint = findWaypointAroundWater(startX, startY, targetX, targetY, agentRadius);
+        if (singleWaypoint) {
+            return [singleWaypoint, { x: targetX, y: targetY }]; // return waypoint + final target
+        }
+        
+        // For complex water bodies, try multi-waypoint pathfinding
+        const multiWaypoints = findMultipleWaypoints(startX, startY, targetX, targetY, agentRadius);
+        if (multiWaypoints && multiWaypoints.length > 0) {
+            // Add final target to the end
+            multiWaypoints.push({ x: targetX, y: targetY });
+            return multiWaypoints;      // return the array of waypoints + final target
+        }
+        
+        // Fallback: try to get closer by finding a waypoint towards the target
+        const fallbackWaypoint = findFallbackWaypoint(startX, startY, targetX, targetY, agentRadius);
+        if (fallbackWaypoint) {
+            return [fallbackWaypoint];
+        }
+        
+        // Last resort: direct path (agent will have to cross water)
+        console.warn("No clear path found, using direct route");
+        return [{ x: targetX, y: targetY }];
     }
 
+
+
     
+
+
+
+
     
+
+    
+
+   
     // define contaminatedwaterbodies at the start
     const contaminatedWaterbodies = [
         { 
