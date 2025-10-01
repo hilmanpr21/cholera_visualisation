@@ -571,6 +571,27 @@
         recovered: 0
     };
 
+    // SEIR state durations in days (real-world time)
+    const seirDurationsDays = {
+        exposedDuration: 3,      // 3 days in exposed state
+        infectedDuration: 4,     // 4 days in infected state  
+        recoveredDuration: 50    // 50 days in recovered state
+    };
+
+    // Calculate SEIR durations in simulation seconds based on timeManager settings
+    // Formula: (days * 24 hours/day) / (timeScale hours/second) = seconds in simulation
+    const seirDurations = {
+        exposedDuration: (seirDurationsDays.exposedDuration * 24) / timeManager.timeScale,
+        infectedDuration: (seirDurationsDays.infectedDuration * 24) / timeManager.timeScale,
+        recoveredDuration: (seirDurationsDays.recoveredDuration * 24) / timeManager.timeScale
+    };
+
+    // Vaccination configuration constants
+    const vaccinationConfig = {
+        coveragePercentage: 0.20,           // 20% of population gets vaccinated (0.0 to 1.0)
+        efficacyPercentage: 0.69            // 69% chance vaccinated agents skip infection stage (0.0 to 1.0)
+    };
+
     // Track which grid cells are occupied by buildings
     const occupiedGridCells = new Set();
 
@@ -644,7 +665,7 @@
             },
             speed: 3,  // movement speed in pixels/frame
             state: "susceptible", // initial state of SEIR
-            statetimer: 0, // define how many secons in this current state
+            statetimer: 0, // define how many seconds in this current state
             bacteria: bacteriaCounts.susceptible, // define the iniitial bacteria count in the agent
 
             // store know waterbody location passed from the global variable contaminatedWaterbodies and cleanWaterbodies. 
@@ -713,7 +734,10 @@
                 previousScheduleMode: null,      // saved schedule mode before water interaction
                 previousTarget: null,            // saved target before water interaction
                 satisfyingNeed: null            // which need is being satisfied ('hydration' or 'defecation')
-            }
+            },
+
+            // Vaccination properties
+            isVaccinated: Math.random() < vaccinationConfig.coveragePercentage  // randomly assign vaccination status
         }
 
         // mark home location as visited, since the agent starts at home
@@ -1206,33 +1230,42 @@
             ctx.closePath();
         }
 
-        // Black border for defecation need
+        // Black dot (not border) for defecation need
         if (agentInput.defecation.needsDefecation) {
             ctx.beginPath();
+            ctx.arc(agentInput.x, agentInput.y, agentInput.radius * 0.4, 0, 2 * Math.PI);
+            ctx.fillStyle = 'black';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // Visual indicators for water interaction modes (borders, not rings)
+        if (agentInput.waterInteraction.mode !== WATER_MODES.AVOIDING) {
+            ctx.beginPath();
             ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
+            
+            switch (agentInput.waterInteraction.mode) {
+                case WATER_MODES.SEEKING:
+                    ctx.strokeStyle = 'cyan'; // Blue border when seeking water
+                    break;
+                case WATER_MODES.IN_WATER:
+                    ctx.strokeStyle = 'yellow'; // Yellow border when in water
+                    break;
+                case WATER_MODES.RETURNING:
+                    ctx.strokeStyle = 'orange'; // Orange border when returning
+                    break;
+            }
+            
+            ctx.lineWidth = 3;
             ctx.stroke();
             ctx.closePath();
         }
 
-        // Visual indicators for water interaction modes (colored rings)
-        if (agentInput.waterInteraction.mode !== WATER_MODES.AVOIDING) {
+        // Yellow ring for vaccinated agents (constant visual indicator)
+        if (agentInput.isVaccinated) {
             ctx.beginPath();
-            ctx.arc(agentInput.x, agentInput.y, agentInput.radius + 3, 0, 2 * Math.PI);
-            
-            switch (agentInput.waterInteraction.mode) {
-                case WATER_MODES.SEEKING:
-                    ctx.strokeStyle = 'cyan'; // Blue ring when seeking water
-                    break;
-                case WATER_MODES.IN_WATER:
-                    ctx.strokeStyle = 'yellow'; // Yellow ring when in water
-                    break;
-                case WATER_MODES.RETURNING:
-                    ctx.strokeStyle = 'orange'; // Orange ring when returning
-                    break;
-            }
-            
+            ctx.arc(agentInput.x, agentInput.y, agentInput.radius + 5, 0, 2 * Math.PI);
+            ctx.strokeStyle = 'gold';
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.closePath();
@@ -1555,20 +1588,31 @@
 
 
 
-    // Logic of agent SEIR state transition
+    // Logic of agent SEIR state transition with vaccination logic
     function updateAgentState(agentInput, deltaTime) {
         switch (agentInput.state) {
             case "exposed":
                 agentInput.statetimer += deltaTime;
-                if (agentInput.statetimer >= 3) {       // checking the condition where the agent have been int he exposed state more than 5 seconds
-                    agentInput.state = "infected";      // change the state to infected
-                    agentInput.bacteria = bacteriaCounts.infected; // update the bacteria count to infected
-                    agentInput.statetimer = 0;          // Set the timer to 0 again
+                if (agentInput.statetimer >= seirDurations.exposedDuration) {       // checking the condition where the agent have been in the exposed state for the specified duration
+                    
+                    // Vaccination logic: if agent is vaccinated, there's a chance to skip infection
+                    if (agentInput.isVaccinated && Math.random() < vaccinationConfig.efficacyPercentage) {
+                        // Vaccinated agent skips infection and goes directly to recovery
+                        agentInput.state = "recovered";
+                        agentInput.bacteria = bacteriaCounts.recovered;
+                        agentInput.statetimer = 0;
+                        console.log("Vaccinated agent skipped infection stage");
+                    } else {
+                        // Normal progression to infected state (unvaccinated or vaccine failed)
+                        agentInput.state = "infected";      // change the state to infected
+                        agentInput.bacteria = bacteriaCounts.infected; // update the bacteria count to infected
+                        agentInput.statetimer = 0;          // Set the timer to 0 again
+                    }
                 }
                 break;
             case "infected":
                 agentInput.statetimer += deltaTime;
-                if (agentInput.statetimer >= 4) {      // checking the condition where the agent have been in the infected state more than 10 seconds
+                if (agentInput.statetimer >= seirDurations.infectedDuration) {      // checking the condition where the agent have been in the infected state for the specified duration
                     agentInput.state = "recovered";     // change the state to recovered
                     agentInput.bacteria = bacteriaCounts.recovered; // update the bacteria count to recovered
                     agentInput.statetimer = 0;          // Set the timer to 0 again
@@ -1576,7 +1620,7 @@
                 break;
             case "recovered":
                 agentInput.statetimer += deltaTime;
-                if (agentInput.statetimer >= 50) {     // checking the condition where the agent have been int he recovered state more than 200 seconds
+                if (agentInput.statetimer >= seirDurations.recoveredDuration) {     // checking the condition where the agent have been in the recovered state for the specified duration
                     agentInput.state = "susceptible";   // change the state to susceptible
                     agentInput.bacteria = bacteriaCounts.susceptible; // update the bacteria count to susceptible
                     agentInput.statetimer = 0;          // Set the timer to 0 again

@@ -4025,3 +4025,443 @@ These critical fixes transform the water body avoidance system from a partially 
 4.  **Mathematical Accuracy**: Proper overlap detection for terrain classification
 
 The enhanced system now provides a solid foundation for Phase 2 implementation (behavioral motivation system) and future advanced pathfinding features.
+
+------------------------------------------------------------------------
+
+# Phase 7: SEIR Timer Scaling System
+
+## Overview
+
+Phase 7 implements an automatic scaling system for SEIR (Susceptible-Exposed-Infected-Recovered) state transition timers that dynamically adjusts based on the simulation's time scale settings. This ensures that disease progression maintains realistic biological timing regardless of how the simulation's time representation changes.
+
+## Problem Addressed
+
+### Original Issue
+
+-   **Fixed timer values**: SEIR state transitions used hardcoded values (3, 4, 50 seconds)
+-   **Time scale mismatch**: When simulation changed from 1 second = 1 day to 1 second = 1 hour, SEIR timers became unrealistic
+-   **Manual scaling required**: Changing time scale required manual recalculation of all SEIR durations
+-   **Maintenance burden**: Future time scale changes would require updating multiple hardcoded values
+
+### Real-World Requirements
+
+-   **Exposed state**: Should last 3 real days (incubation period)
+-   **Infected state**: Should last 4 real days (active infection period)
+-   **Recovered state**: Should last 50 real days (immunity period)
+-   **Automatic scaling**: These durations should adapt automatically to any time scale setting
+
+## Implementation
+
+### Step 7.1: SEIR Duration Constants
+
+Added configurable constants that define real-world disease progression timing:
+
+``` javascript
+// SEIR state durations in days (real-world time)
+const seirDurationsDays = {
+    exposedDuration: 3,      // 3 days in exposed state
+    infectedDuration: 4,     // 4 days in infected state  
+    recoveredDuration: 50    // 50 days in recovered state
+};
+
+// Calculate SEIR durations in simulation seconds based on timeManager settings
+// Formula: (days * 24 hours/day) / (timeScale hours/second) = seconds in simulation
+const seirDurations = {
+    exposedDuration: (seirDurationsDays.exposedDuration * 24) / timeManager.timeScale,
+    infectedDuration: (seirDurationsDays.infectedDuration * 24) / timeManager.timeScale,
+    recoveredDuration: (seirDurationsDays.recoveredDuration * 24) / timeManager.timeScale
+};
+```
+
+**Key Design Features:** - **Real-world definitions**: Disease durations defined in actual days for medical accuracy - **Automatic calculation**: Simulation durations computed using time scale formula - **Single source of truth**: All timing changes made in one location
+
+### Step 7.2: Updated State Transition Logic
+
+Modified the SEIR state transition function to use scalable duration constants:
+
+``` javascript
+// Logic of agent SEIR state transition
+function updateAgentState(agentInput, deltaTime) {
+    switch (agentInput.state) {
+        case "exposed":
+            agentInput.statetimer += deltaTime;
+            if (agentInput.statetimer >= seirDurations.exposedDuration) {
+                agentInput.state = "infected";
+                agentInput.bacteria = bacteriaCounts.infected;
+                agentInput.statetimer = 0;
+            }
+            break;
+        case "infected":
+            agentInput.statetimer += deltaTime;
+            if (agentInput.statetimer >= seirDurations.infectedDuration) {
+                agentInput.state = "recovered";
+                agentInput.bacteria = bacteriaCounts.recovered;
+                agentInput.statetimer = 0;
+            }
+            break;
+        case "recovered":
+            agentInput.statetimer += deltaTime;
+            if (agentInput.statetimer >= seirDurations.recoveredDuration) {
+                agentInput.state = "susceptible";
+                agentInput.bacteria = bacteriaCounts.susceptible;
+                agentInput.statetimer = 0;
+            }
+            break;
+    }
+}
+```
+
+**Key Changes:** - **Dynamic thresholds**: Uses calculated durations instead of hardcoded values - **Automatic scaling**: Timers adjust automatically when time scale changes - **Maintained logic**: Core state transition logic remains unchanged
+
+## Scaling Formula
+
+### Mathematical Foundation
+
+The scaling formula converts real-world days into simulation seconds:
+
+```         
+Simulation Duration (seconds) = (Real Days × 24 hours/day) ÷ (timeScale hours/second)
+```
+
+### Time Scale Examples
+
+#### Current Setting (timeScale: 1)
+
+-   **1 simulation second = 1 real hour**
+-   Exposed: (3 days × 24 hours) ÷ 1 = **72 seconds**
+-   Infected: (4 days × 24 hours) ÷ 1 = **96 seconds**
+-   Recovered: (50 days × 24 hours) ÷ 1 = **1200 seconds**
+
+#### Faster Simulation (timeScale: 2)
+
+-   **1 simulation second = 2 real hours**
+-   Exposed: (3 days × 24 hours) ÷ 2 = **36 seconds**
+-   Infected: (4 days × 24 hours) ÷ 2 = **48 seconds**
+-   Recovered: (50 days × 24 hours) ÷ 2 = **600 seconds**
+
+#### Slower Simulation (timeScale: 0.5)
+
+-   **1 simulation second = 0.5 real hours**
+-   Exposed: (3 days × 24 hours) ÷ 0.5 = **144 seconds**
+-   Infected: (4 days × 24 hours) ÷ 0.5 = **192 seconds**
+-   Recovered: (50 days × 24 hours) ÷ 0.5 = **2400 seconds**
+
+## System Benefits
+
+### 1. Time Scale Flexibility
+
+-   **Easy experimentation**: Change time scale without recalculating SEIR timers
+-   **Research adaptability**: Support different temporal resolutions for various studies
+-   **Future-proof**: New time scales automatically work without code changes
+
+### 2. Medical Accuracy
+
+-   **Real-world timing**: Disease progression matches epidemiological data
+-   **Consistent biology**: Agent health states remain realistic across all time scales
+-   **Validation support**: Easier to compare with real-world cholera outbreak data
+
+### 3. Maintenance Efficiency
+
+-   **Single configuration point**: All timing changes made in one location
+-   **Reduced errors**: No manual calculation required for time scale changes
+-   **Clear documentation**: Real-world durations clearly specified in code
+
+### 4. Code Clarity
+
+-   **Explicit intentions**: Real-world durations clearly documented
+-   **Separation of concerns**: Time scale logic separated from disease logic
+-   **Better readability**: Formula comments explain calculation methodology
+
+## Implementation Location
+
+The SEIR timer scaling system was added to `sim_depr_mobility_hydration_logic.js`:
+
+-   **Line \~570-590**: SEIR duration constants and calculations
+-   **Line \~1558-1586**: Updated state transition logic using scalable durations
+
+## Future Considerations
+
+### Dynamic Time Scale Changes
+
+Currently, time scale is set at initialization. For dynamic changes during simulation:
+
+``` javascript
+// Function to recalculate SEIR durations when time scale changes
+function updateSEIRDurations() {
+    seirDurations.exposedDuration = (seirDurationsDays.exposedDuration * 24) / timeManager.timeScale;
+    seirDurations.infectedDuration = (seirDurationsDays.infectedDuration * 24) / timeManager.timeScale;
+    seirDurations.recoveredDuration = (seirDurationsDays.recoveredDuration * 24) / timeManager.timeScale;
+}
+```
+
+### Disease Variant Support
+
+The system can easily accommodate different cholera strains or disease variants:
+
+``` javascript
+// Example: Different SEIR durations for cholera variants
+const choleraVariants = {
+    classic: { exposed: 3, infected: 4, recovered: 50 },
+    severe: { exposed: 2, infected: 6, recovered: 30 },
+    mild: { exposed: 4, infected: 3, recovered: 60 }
+};
+```
+
+This SEIR timer scaling system ensures the cholera simulation maintains biological realism while providing flexibility for different research scenarios and time scale requirements.
+
+------------------------------------------------------------------------
+
+# Phase 8: Vaccination Logic Implementation
+
+## Overview
+
+Phase 8 introduces a comprehensive vaccination system to the cholera simulation, allowing researchers to study the impact of vaccination campaigns on disease transmission dynamics. The system includes configurable vaccination coverage, efficacy modeling, and enhanced visual indicators to distinguish vaccinated from unvaccinated agents.
+
+## Problem Addressed
+
+### Research Requirements
+
+-   **Vaccination impact studies**: Need to model how vaccination campaigns affect cholera outbreak dynamics
+-   **Policy evaluation**: Compare different vaccination coverage levels and efficacy rates
+-   **Behavioral realism**: Vaccinated agents should have reduced infection probability while maintaining other behaviors
+-   **Visual distinction**: Clear identification of vaccination status during simulation observation
+
+### Epidemiological Modeling
+
+-   **Partial immunity**: Vaccines provide probabilistic protection, not absolute immunity
+-   **Population coverage**: Realistic vaccination rates (typically 10-30% in emergency campaigns)
+-   **Breakthrough infections**: Some vaccinated individuals may still get infected due to vaccine failure
+
+## Implementation
+
+### Step 8.1: Vaccination Configuration Constants
+
+Added configurable parameters for vaccination behavior that can be easily modified for different research scenarios:
+
+``` javascript
+// Vaccination configuration constants
+const vaccinationConfig = {
+    coveragePercentage: 0.20,           // 20% of population gets vaccinated (0.0 to 1.0)
+    efficacyPercentage: 0.69            // 69% chance vaccinated agents skip infection stage (0.0 to 1.0)
+};
+```
+
+**Key Design Features:** - **Coverage percentage**: Determines what proportion of the population receives vaccination - **Efficacy percentage**: Probability that vaccination prevents progression from exposed to infected - **Easy modification**: Single location to adjust vaccination parameters for different studies - **Realistic values**: Based on real-world cholera vaccine effectiveness data
+
+### Step 8.2: Agent Vaccination Assignment
+
+Enhanced agent creation to randomly assign vaccination status during initialization:
+
+``` javascript
+// Vaccination properties
+isVaccinated: Math.random() < vaccinationConfig.coveragePercentage  // randomly assign vaccination status
+```
+
+**Assignment Strategy:** - **Random distribution**: Vaccination status assigned probabilistically during agent creation - **Population-level coverage**: Ensures approximately 20% of agents are vaccinated - **Individual tracking**: Each agent carries vaccination status throughout simulation - **Initialization timing**: Vaccination status determined at birth, simulating pre-outbreak vaccination campaigns
+
+### Step 8.3: Enhanced SEIR State Transition Logic
+
+Modified the disease progression logic to account for vaccination efficacy:
+
+``` javascript
+// Logic of agent SEIR state transition with vaccination logic
+function updateAgentState(agentInput, deltaTime) {
+    switch (agentInput.state) {
+        case "exposed":
+            agentInput.statetimer += deltaTime;
+            if (agentInput.statetimer >= seirDurations.exposedDuration) {
+                
+                // Vaccination logic: if agent is vaccinated, there's a chance to skip infection
+                if (agentInput.isVaccinated && Math.random() < vaccinationConfig.efficacyPercentage) {
+                    // Vaccinated agent skips infection and goes directly to recovery
+                    agentInput.state = "recovered";
+                    agentInput.bacteria = bacteriaCounts.recovered;
+                    agentInput.statetimer = 0;
+                    console.log("Vaccinated agent skipped infection stage");
+                } else {
+                    // Normal progression to infected state (unvaccinated or vaccine failed)
+                    agentInput.state = "infected";
+                    agentInput.bacteria = bacteriaCounts.infected;
+                    agentInput.statetimer = 0;
+                }
+            }
+            break;
+        // ... other states remain unchanged
+    }
+}
+```
+
+**Vaccination Mechanism:** - **Intervention point**: Vaccination effect occurs at exposed→infected transition - **Probabilistic protection**: 69% chance of skipping infection stage for vaccinated agents - **Alternative pathway**: Vaccinated agents go directly from exposed to recovered - **Breakthrough infections**: 31% of vaccinated agents still progress to infection (vaccine failure) - **Normal progression**: Unvaccinated agents follow standard SEIR pathway
+
+### Step 8.4: Enhanced Visual Indicator System
+
+Updated the visual representation system with improved indicators for different agent states and behaviors:
+
+#### New Visual Indicator Rules:
+
+**1. Defecation Need - Black Dot (Changed from Border)**
+
+``` javascript
+// Black dot (not border) for defecation need
+if (agentInput.defecation.needsDefecation) {
+    ctx.beginPath();
+    ctx.arc(agentInput.x, agentInput.y, agentInput.radius * 0.4, 0, 2 * Math.PI);
+    ctx.fillStyle = 'black';
+    ctx.fill();
+    ctx.closePath();
+}
+```
+
+**2. Water Interaction - Borders (Changed from Rings)**
+
+``` javascript
+// Visual indicators for water interaction modes (borders, not rings)
+if (agentInput.waterInteraction.mode !== WATER_MODES.AVOIDING) {
+    ctx.beginPath();
+    ctx.arc(agentInput.x, agentInput.y, agentInput.radius, 0, 2 * Math.PI);
+    
+    switch (agentInput.waterInteraction.mode) {
+        case WATER_MODES.SEEKING:
+            ctx.strokeStyle = 'cyan'; // Blue border when seeking water
+            break;
+        case WATER_MODES.IN_WATER:
+            ctx.strokeStyle = 'yellow'; // Yellow border when in water
+            break;
+        case WATER_MODES.RETURNING:
+            ctx.strokeStyle = 'orange'; // Orange border when returning
+            break;
+    }
+    
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.closePath();
+}
+```
+
+**3. Vaccination Status - Gold Ring (New Indicator)**
+
+``` javascript
+// Yellow ring for vaccinated agents (constant visual indicator)
+if (agentInput.isVaccinated) {
+    ctx.beginPath();
+    ctx.arc(agentInput.x, agentInput.y, agentInput.radius + 5, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'gold';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+}
+```
+
+#### Complete Visual Indicator Summary:
+
+| Agent State/Behavior | Visual Indicator | Description |
+|-----------------------------|-------------------------|------------------|
+| **SEIR States** | Agent fill color | Susceptible (blue), Exposed (yellow), Infected (red), Recovered (green) |
+| **Hydration need** | White dot (center) | 40% of agent radius, indicates thirst |
+| **Defecation need** | Black dot (center) | 40% of agent radius, indicates biological need |
+| **Seeking water** | Cyan border | 3px border around agent circumference |
+| **In water** | Yellow border | 3px border around agent circumference |
+| **Returning from water** | Orange border | 3px border around agent circumference |
+| **Vaccinated** | Gold ring | 2px ring, 5px outside agent circumference |
+
+#### Visual Hierarchy:
+
+1.  **Base agent**: SEIR state color fill
+2.  **Biological needs**: Centered dots (white for hydration, black for defecation)
+3.  **Water interaction**: Colored borders on agent circumference
+4.  **Vaccination status**: Gold ring outside agent boundary
+
+## System Benefits
+
+### 1. Research Flexibility
+
+-   **Parameter adjustment**: Easy modification of vaccination coverage and efficacy
+-   **Scenario comparison**: Test different vaccination strategies in same simulation
+-   **Policy evaluation**: Model impact of vaccination campaigns on outbreak dynamics
+-   **Sensitivity analysis**: Understand how vaccination parameters affect disease spread
+
+### 2. Epidemiological Realism
+
+-   **Partial immunity**: Realistic vaccine efficacy modeling with breakthrough infections
+-   **Population heterogeneity**: Mixed population of vaccinated and unvaccinated individuals
+-   **Biological accuracy**: Vaccination affects disease progression, not exposure risk
+-   **Public health relevance**: Models real-world vaccination campaign outcomes
+
+### 3. Visual Analysis
+
+-   **Clear identification**: Gold rings make vaccinated agents immediately recognizable
+-   **Behavior tracking**: Enhanced visual indicators for all agent states and needs
+-   **Research observation**: Easy visual assessment of vaccination impact during simulation
+-   **Data collection**: Visual feedback supports qualitative analysis of simulation dynamics
+
+### 4. Implementation Quality
+
+-   **Modular design**: Vaccination logic integrated without disrupting existing systems
+-   **Performance efficiency**: Minimal computational overhead for vaccination checks
+-   **Maintainable code**: Clear separation of vaccination logic and visual indicators
+-   **Extensible framework**: Foundation for additional public health interventions
+
+## Vaccination Impact Scenarios
+
+### High Coverage (50%) + High Efficacy (90%)
+
+-   **Expected outcome**: Significant reduction in infection spread
+-   **Herd immunity effects**: Protected individuals reduce transmission to unvaccinated
+-   **Outbreak suppression**: May prevent epidemic growth in small populations
+
+### Medium Coverage (20%) + Medium Efficacy (69%)
+
+-   **Expected outcome**: Moderate protection for vaccinated individuals
+-   **Limited population effect**: Insufficient coverage for herd immunity
+-   **Individual benefit**: Clear advantage for vaccinated agents
+
+### Low Coverage (10%) + Low Efficacy (40%)
+
+-   **Expected outcome**: Minimal population-level impact
+-   **Individual variation**: Some protection for few vaccinated agents
+-   **Research value**: Demonstrates importance of high coverage and efficacy
+
+## Implementation Location
+
+The vaccination system was added to `sim_depr_mobility_hydration_logic.js`:
+
+-   **Line \~585-590**: Vaccination configuration constants
+-   **Line \~740**: Agent vaccination status assignment
+-   **Line \~1585-1610**: Enhanced SEIR state transition logic with vaccination
+-   **Line \~1220-1270**: Updated visual indicator system
+
+## Future Extensions
+
+### Dynamic Vaccination Campaigns
+
+``` javascript
+// Function to implement vaccination campaign during simulation
+function implementVaccinationCampaign(targetCoverage, campaignDuration) {
+    // Vaccinate additional agents over time
+    // Track vaccination timing and effectiveness
+}
+```
+
+### Vaccine Types and Boosters
+
+``` javascript
+// Support for different vaccine types with varying efficacy
+const vaccineTypes = {
+    oralCholeraVaccine: { efficacy: 0.69, duration: 1095 }, // 3 years
+    improvedVaccine: { efficacy: 0.85, duration: 1825 }     // 5 years
+};
+```
+
+### Age-Stratified Vaccination
+
+``` javascript
+// Age-based vaccination prioritization
+function assignVaccinationByAge(agent) {
+    if (agent.age < 5 || agent.age > 65) {
+        return Math.random() < priorityVaccinationRate;
+    }
+    return Math.random() < generalVaccinationRate;
+}
+```
+
+This vaccination system provides a comprehensive framework for studying the impact of immunization on cholera transmission dynamics while maintaining the simulation's existing behavioral and epidemiological realism.
