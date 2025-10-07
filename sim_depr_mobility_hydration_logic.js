@@ -592,6 +592,42 @@
         efficacyPercentage: 0.69            // 69% chance vaccinated agents skip infection stage (0.0 to 1.0)
     };
 
+    // Global simulation parameters that can be controlled by sliders
+    const simulationParams = {
+        vaccinationCoverage: 0.20,          // Current vaccination coverage (0.0 to 1.0)
+        explorationParameter: 0.5,          // d-EPR rho parameter (0.0 to 1.0)
+        returnDecayParameter: 0.2           // d-EPR gamma parameter (0.0 to 1.0)
+    };
+
+    // Functions to update simulation parameters from sliders
+    function updateVaccinationCoverage(newPercentage) {
+        simulationParams.vaccinationCoverage = newPercentage / 100; // Convert percentage to decimal
+        vaccinationConfig.coveragePercentage = simulationParams.vaccinationCoverage;
+        console.log(`Vaccination coverage updated to ${newPercentage}%`);
+    }
+
+    function updateExplorationParameter(newRho) {
+        simulationParams.explorationParameter = newRho;
+        // Update all existing agents' rho parameter
+        if (agents && agents.length > 0) {
+            agents.forEach(agent => {
+                agent.rho = newRho;
+            });
+        }
+        console.log(`Exploration parameter (ρ) updated to ${newRho}`);
+    }
+
+    function updateReturnDecayParameter(newGamma) {
+        simulationParams.returnDecayParameter = newGamma;
+        // Update all existing agents' gamma parameter
+        if (agents && agents.length > 0) {
+            agents.forEach(agent => {
+                agent.gamma = newGamma;
+            });
+        }
+        console.log(`Return decay parameter (γ) updated to ${newGamma}`);
+    }
+
     // Track which grid cells are occupied by buildings
     const occupiedGridCells = new Set();
 
@@ -685,8 +721,8 @@
             visitedCells: {}, // object to store visited cells and visit counts
             uniqueVisitCount: 0, // count of unique cells visited (S in the d-EPR formula)
             currentTarget: null, // current movement target cell
-            rho: 0.5, // exploration parameter (0 < rho < 1)
-            gamma: 0.2, // return decay parameter (0 < gamma < 1)
+            rho: simulationParams.explorationParameter, // exploration parameter (0 < rho < 1)
+            gamma: simulationParams.returnDecayParameter, // return decay parameter (0 < gamma < 1)
 
             // scheduler specific properties
             scheduleMode: 'atHome', // start scheduling mode at home
@@ -737,7 +773,7 @@
             },
 
             // Vaccination properties
-            isVaccinated: Math.random() < vaccinationConfig.coveragePercentage  // randomly assign vaccination status
+            isVaccinated: Math.random() < simulationParams.vaccinationCoverage  // randomly assign vaccination status
         }
 
         // mark home location as visited, since the agent starts at home
@@ -1264,9 +1300,9 @@
         // Yellow ring for vaccinated agents (constant visual indicator)
         if (agentInput.isVaccinated) {
             ctx.beginPath();
-            ctx.arc(agentInput.x, agentInput.y, agentInput.radius + 5, 0, 2 * Math.PI);
+            ctx.arc(agentInput.x, agentInput.y, agentInput.radius + 4, 0, 2 * Math.PI);
             ctx.strokeStyle = 'gold';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 3;
             ctx.stroke();
             ctx.closePath();
         }
@@ -1959,7 +1995,11 @@
     window.sim_depr_mobility_hydration_logic = { 
         start, 
         stop,
-        reset // Optional but useful for debugging
+        reset, // Optional but useful for debugging
+        // Expose parameter update functions globally
+        updateVaccinationCoverage,
+        updateExplorationParameter,
+        updateReturnDecayParameter
     };
 
 

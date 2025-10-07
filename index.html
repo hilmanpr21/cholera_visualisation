@@ -52,6 +52,29 @@
                         </label>
                     </div>
 
+                    <!-- Simulation Parameter Controls -->
+                    <div class="parameter-controls">
+                        <h4>Simulation Parameters</h4>
+                        
+                        <!-- Vaccination Percentage Slider -->
+                        <div class="slider-container">
+                            <label for="vaccinationSlider">Vaccination Coverage: <span id="vaccinationValue">20</span>%</label>
+                            <input type="range" id="vaccinationSlider" min="0" max="100" step="10" value="20">
+                        </div>
+
+                        <!-- Rho (Exploration) Parameter Slider -->
+                        <div class="slider-container">
+                            <label for="rhoSlider">Exploration Parameter (ρ): <span id="rhoValue">0.50</span></label>
+                            <input type="range" id="rhoSlider" min="0" max="1" step="0.05" value="0.5">
+                        </div>
+
+                        <!-- Gamma (Return Decay) Parameter Slider -->
+                        <div class="slider-container">
+                            <label for="gammaSlider">Return Decay Parameter (γ): <span id="gammaValue">0.20</span></label>
+                            <input type="range" id="gammaSlider" min="0" max="1" step="0.05" value="0.2">
+                        </div>
+                    </div>
+
                 </div>
                 
                 <div class="chart-container">
@@ -69,10 +92,12 @@
                     <h2>Simulation 2: Random Movement</h2>
                     <p>This simulation shows 200 agents moving randomly through the environment, with disease transmission occurring when susceptible agents contact contaminated water.</p>
                 </div> 
+                <!--
                 <div class="step" data-step="sim_waterbody_to_contaminated_waterbody">
                     <h2>Simulation 3: Waterbody contamination</h2>
                     <p>This simulation combines the previous two approaches with 200 agents moving between home and work locations, creating a more realistic model of human movement patterns.</p>
                 </div>
+                -->
                 <div class="step" data-step="sim_waterbody_to_contaminated_waterbody_with_house">
                     <h2>Simulation 4: Waterbody Contamination with House</h2>
                     <p>This simulation combines the previous two approaches with 200 agents moving between home and work locations, creating a more realistic model of human movement patterns.</p>
@@ -111,6 +136,7 @@
     <script src="sim_depr_mobility.js"></script>
     <script src="sim_depr_mobility_hydration_logic.js"></script>
     <script src="scroll.js"></script>
+    <script src="slider-controls.js"></script>
 
 </body>
 </html>

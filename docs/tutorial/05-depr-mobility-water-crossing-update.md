@@ -4465,3 +4465,282 @@ function assignVaccinationByAge(agent) {
 ```
 
 This vaccination system provides a comprehensive framework for studying the impact of immunization on cholera transmission dynamics while maintaining the simulation's existing behavioral and epidemiological realism.
+
+------------------------------------------------------------------------
+
+# Phase 9: Interactive Parameter Control System
+
+## Overview
+
+Phase 9 introduces real-time interactive controls for key simulation parameters through HTML sliders, enabling researchers to dynamically adjust vaccination coverage and d-EPR mobility parameters during simulation execution. This provides immediate feedback on parameter changes and facilitates interactive exploration of different scenarios without simulation restarts.
+
+## Problem Addressed
+
+### Research Workflow Challenges
+- **Parameter experimentation**: Need to test different parameter values without restarting simulation
+- **Real-time adjustment**: Observe immediate effects of parameter changes on agent behavior
+- **User-friendly controls**: Provide intuitive interface for non-technical users
+- **Interactive research**: Enable live parameter tuning during presentations and analysis
+
+### Previous Limitations
+- **Static parameters**: Values set at initialization, requiring code changes to experiment
+- **Manual recoding**: Each parameter adjustment needed source code modification
+- **Restart requirement**: New parameters only took effect after full simulation restart
+- **Research barriers**: Technical knowledge required to modify parameter values
+
+## Implementation
+
+### Step 9.1: HTML Slider Interface
+
+Added three interactive sliders to the web interface for controlling key simulation parameters:
+
+```html
+<!-- Simulation Parameter Controls -->
+<div class="parameter-controls">
+    <h4>Simulation Parameters</h4>
+    
+    <!-- Vaccination Percentage Slider -->
+    <div class="slider-container">
+        <label for="vaccinationSlider">Vaccination Coverage: <span id="vaccinationValue">20</span>%</label>
+        <input type="range" id="vaccinationSlider" min="0" max="100" step="10" value="20">
+    </div>
+
+    <!-- Rho (Exploration) Parameter Slider -->
+    <div class="slider-container">
+        <label for="rhoSlider">Exploration Parameter (ρ): <span id="rhoValue">0.50</span></label>
+        <input type="range" id="rhoSlider" min="0" max="1" step="0.05" value="0.5">
+    </div>
+
+    <!-- Gamma (Return Decay) Parameter Slider -->
+    <div class="slider-container">
+        <label for="gammaSlider">Return Decay Parameter (γ): <span id="gammaValue">0.20</span></label>
+        <input type="range" id="gammaSlider" min="0" max="1" step="0.05" value="0.2">
+    </div>
+</div>
+```
+
+**Slider Specifications:**
+- **Vaccination Coverage**: 0-100% range, 10% increments for practical coverage levels
+- **Exploration Parameter (ρ)**: 0.0-1.0 range, 0.05 increments for fine-tuned mobility control
+- **Return Decay Parameter (γ)**: 0.0-1.0 range, 0.05 increments for precise return behavior tuning
+
+### Step 9.2: Global Parameter Management System
+
+Enhanced the JavaScript simulation with a centralized parameter management system:
+
+```javascript
+// Global simulation parameters that can be controlled by sliders
+const simulationParams = {
+    vaccinationCoverage: 0.20,          // Current vaccination coverage (0.0 to 1.0)
+    explorationParameter: 0.5,          // d-EPR rho parameter (0.0 to 1.0)
+    returnDecayParameter: 0.2           // d-EPR gamma parameter (0.0 to 1.0)
+};
+
+// Functions to update simulation parameters from sliders
+function updateVaccinationCoverage(newPercentage) {
+    simulationParams.vaccinationCoverage = newPercentage / 100;
+    vaccinationConfig.coveragePercentage = simulationParams.vaccinationCoverage;
+    console.log(`Vaccination coverage updated to ${newPercentage}%`);
+}
+
+function updateExplorationParameter(newRho) {
+    simulationParams.explorationParameter = newRho;
+    // Update all existing agents' rho parameter
+    if (agents && agents.length > 0) {
+        agents.forEach(agent => {
+            agent.rho = newRho;
+        });
+    }
+    console.log(`Exploration parameter (ρ) updated to ${newRho}`);
+}
+
+function updateReturnDecayParameter(newGamma) {
+    simulationParams.returnDecayParameter = newGamma;
+    // Update all existing agents' gamma parameter
+    if (agents && agents.length > 0) {
+        agents.forEach(agent => {
+            agent.gamma = newGamma;
+        });
+    }
+    console.log(`Return decay parameter (γ) updated to ${newGamma}`);
+}
+```
+
+**Key Features:**
+- **Centralized storage**: Single source of truth for adjustable parameters
+- **Live updates**: Parameters applied immediately to existing agents
+- **Vaccination effect**: New agents created after slider change use updated vaccination rate
+- **d-EPR updates**: Existing agents' behavior modified in real-time
+
+### Step 9.3: Real-Time Event Handling System
+
+Implemented responsive event handlers that connect slider movements to simulation updates:
+
+```javascript
+document.addEventListener('DOMContentLoaded', function() {
+    // Vaccination Coverage Slider
+    const vaccinationSlider = document.getElementById('vaccinationSlider');
+    const vaccinationValue = document.getElementById('vaccinationValue');
+    
+    vaccinationSlider.addEventListener('input', function() {
+        const value = parseInt(this.value);
+        vaccinationValue.textContent = value;
+        
+        if (window.sim_depr_mobility_hydration_logic?.updateVaccinationCoverage) {
+            window.sim_depr_mobility_hydration_logic.updateVaccinationCoverage(value);
+        }
+    });
+
+    // Similar handlers for rho and gamma parameters...
+});
+```
+
+**Event Handler Features:**
+- **Real-time updates**: Parameters change immediately as slider moves
+- **Visual feedback**: Displayed values update instantly
+- **Error handling**: Graceful fallback if simulation functions not available
+- **Type safety**: Proper number parsing for different parameter types
+
+### Step 9.4: Agent Integration and Synchronization
+
+Updated agent creation and management to use global parameters:
+
+```javascript
+// Agent creation uses global parameters
+rho: simulationParams.explorationParameter,    // Dynamic exploration parameter
+gamma: simulationParams.returnDecayParameter,  // Dynamic return decay parameter
+isVaccinated: Math.random() < simulationParams.vaccinationCoverage  // Dynamic vaccination rate
+```
+
+**Synchronization Strategy:**
+- **New agents**: Use current slider values at creation time
+- **Existing agents**: d-EPR parameters updated immediately when sliders change
+- **Vaccination status**: Only affects newly created agents (realistic constraint)
+- **Behavioral continuity**: Smooth transitions without simulation disruption
+
+## Parameter Effects and Usage Guidelines
+
+### Vaccination Coverage Slider (0-100%, step 10%)
+
+**Research Applications:**
+- **Campaign evaluation**: Model different vaccination coverage scenarios
+- **Herd immunity thresholds**: Find minimum coverage for population protection
+- **Resource allocation**: Optimize vaccination distribution strategies
+
+**Parameter Effects:**
+- **0%**: No vaccination, full population susceptible
+- **20% (default)**: Moderate protection, some breakthrough infections
+- **50%+**: Significant population protection, reduced transmission
+- **80%+**: Approaching herd immunity in small populations
+
+### Exploration Parameter (ρ: 0.0-1.0, step 0.05)
+
+**Research Applications:**
+- **Mobility pattern studies**: Understand how exploration tendency affects disease spread
+- **Containment strategies**: Model effects of movement restrictions
+- **Population heterogeneity**: Simulate different personality types
+
+**Parameter Effects:**
+- **ρ = 0.0**: Agents only return to familiar locations (minimal exploration)
+- **ρ = 0.5 (default)**: Balanced exploration and return behavior
+- **ρ = 1.0**: Maximum exploration, agents constantly seek new locations
+
+### Return Decay Parameter (γ: 0.0-1.0, step 0.05)
+
+**Research Applications:**
+- **Memory modeling**: Study how location familiarity affects revisitation
+- **Routine behavior**: Understand impact of established movement patterns
+- **Intervention timing**: Optimize when to introduce movement-based interventions
+
+**Parameter Effects:**
+- **γ = 0.0**: No decay, all locations equally likely for return visits
+- **γ = 0.2 (default)**: Moderate preference for frequently visited locations
+- **γ = 1.0**: Strong preference for most familiar locations
+
+## Interactive Research Scenarios
+
+### Scenario 1: Vaccination Campaign Impact
+1. **Start** with 0% vaccination coverage
+2. **Observe** initial disease spread pattern
+3. **Gradually increase** vaccination to 20%, 40%, 60%
+4. **Monitor** reduction in infection rates and transmission dynamics
+
+### Scenario 2: Mobility Restriction Effects
+1. **Begin** with high exploration (ρ = 0.8)
+2. **Simulate** policy intervention by reducing to ρ = 0.3
+3. **Observe** immediate changes in agent movement patterns
+4. **Assess** impact on disease containment
+
+### Scenario 3: Combined Intervention Strategies
+1. **Low vaccination** (10%) + **high mobility** (ρ = 0.7)
+2. **Increase vaccination** to 30% while **maintaining mobility**
+3. **Add mobility restrictions** (ρ = 0.4) to **existing vaccination**
+4. **Compare effectiveness** of different intervention combinations
+
+## System Benefits
+
+### 1. Research Efficiency
+- **Real-time experimentation**: No simulation restarts required for parameter changes
+- **Interactive exploration**: Immediate feedback on parameter effects
+- **Rapid prototyping**: Quick testing of different parameter combinations
+- **Presentation tools**: Live demonstrations during research presentations
+
+### 2. User Accessibility
+- **Intuitive interface**: Slider controls require no programming knowledge
+- **Visual feedback**: Parameter values clearly displayed
+- **Immediate results**: Changes visible in agent behavior within seconds
+- **Error prevention**: Slider constraints prevent invalid parameter values
+
+### 3. Research Flexibility
+- **Dynamic scenarios**: Model changing conditions during outbreak progression
+- **Intervention timing**: Test optimal timing for policy implementations
+- **Sensitivity analysis**: Systematically explore parameter space
+- **Collaborative research**: Multiple researchers can easily test hypotheses
+
+### 4. Educational Value
+- **Interactive learning**: Students can explore parameter effects hands-on
+- **Hypothesis testing**: Immediate feedback on research questions
+- **Visual understanding**: Direct observation of parameter-behavior relationships
+- **Engagement**: Interactive elements increase user engagement with simulation
+
+## Technical Implementation Details
+
+### Parameter Update Mechanisms
+- **Vaccination**: Affects only newly created agents (realistic biological constraint)
+- **d-EPR parameters**: Updated immediately for all existing agents
+- **Memory preservation**: Agent location memory and visit counts maintained during parameter changes
+- **State continuity**: SEIR states and other properties unaffected by parameter updates
+
+### Performance Considerations
+- **Minimal overhead**: Parameter updates use O(n) operations for agent list iteration
+- **Event throttling**: Slider changes processed smoothly without performance impact
+- **Memory efficiency**: No additional storage required for parameter management
+- **Real-time updates**: Changes applied within single animation frame
+
+### Implementation Location
+The interactive parameter control system spans multiple files:
+- **HTML Interface**: `index.html` (lines ~45-75)
+- **Parameter management**: `sim_depr_mobility_hydration_logic.js` (lines ~595-625)
+- **Event handlers**: `index.html` (lines ~140-190)
+- **Global exposure**: `sim_depr_mobility_hydration_logic.js` (lines ~1995-2005)
+
+## Future Enhancements
+
+### Additional Parameters
+```javascript
+// Potential future slider controls
+const additionalParams = {
+    hydrationThreshold: 200,        // Distance before requiring water
+    defecationFrequency: 24,        // Hours between defecation needs
+    waterStayDuration: 0.5,         // Time spent at water sources
+    vaccineEfficacy: 0.69           // Vaccine effectiveness rate
+};
+```
+
+### Advanced Controls
+- **Preset scenarios**: Buttons for common parameter combinations
+- **Parameter presets**: Save and load different experimental configurations
+- **Time-based changes**: Automated parameter changes during simulation
+- **Multi-agent types**: Different parameters for different agent populations
+
+This interactive parameter control system transforms the cholera simulation from a static model into a dynamic research tool, enabling real-time exploration of intervention strategies and parameter effects on disease transmission dynamics.
