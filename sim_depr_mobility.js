@@ -129,6 +129,13 @@
     // Grid classification storage
     const gridClassification = {};
 
+    // Gravity kernel parameters for D-EPR mobility
+    const GRAVITY_KERNEL_PARAMS = {
+        ATTRACTIVENESS: 1,          // A_i and A_j (degree of attractiveness) - placeholder for future modifications
+        BETA: 2,                    // Distance decay parameter for gravity kernel (r_ij ^ beta)
+        MIN_DISTANCE: 1             // Minimum distance to prevent division by zero
+    };
+
     // declare function to check if coordinate is in water body
     function isInWaterBody(x, y) {
         // check if the coordinate is within any contaminated water body
@@ -647,9 +654,17 @@
                 
                 // Only force new target if agent is in d-EPR exploration mode
                 if (agentInput.scheduleMode === 'deprMobile') {
-                    // Force agent to choose a new exploration target
+                    // Force agent to choose a new exploration target using gravity-based selection
                     console.log("Forcing new target for stuck agent in d-EPR mode");
-                    agentInput.currentTarget = chooseNewExplorationTarget(agentInput);
+                    agentInput.currentTarget = chooseGravityBasedExplorationTarget(agentInput);
+                    
+                    // If gravity-based selection returns null, it means no unvisited cells available
+                    // In this case, agent should naturally return home or to familiar areas
+                    if (!agentInput.currentTarget) {
+                        console.log("No unvisited cells available for stuck agent, choosing gravity-based return");
+                        agentInput.currentTarget = chooseGravityBasedReturnTarget(agentInput);
+                    }
+                    
                     agentInput.needsNewPath = true;
                     
                     // Reset stuck detection
@@ -726,104 +741,215 @@
         return true; // Safe from water
     }
 
-    // Declare function to choose new exploration target (water-aware with safety buffer)
-    function chooseNewExplorationTarget(agentInput) {
-        // get grid height and width
-        const gridWidth = Math.ceil(canvas.width / gridSize); // calculate how many grid cells fit across (columns)
-        const gridHeight = Math.ceil(canvas.height / gridSize); // calculate how many grid cells fit down (rows)
+    /**
+     * ================================================================================
+     * GRAVITY KERNEL DENSITY IMPLEMENTATION FOR D-EPR MOBILITY
+     * ================================================================================
+     * 
+     * This section implements gravity-based target selection for D-EPR (Preferential Return)
+     * mobility model, replacing random cell selection with distance-weighted probabilities.
+     * 
+     * MATHEMATICAL FOUNDATION:
+     * ------------------------
+     * The gravity kernel formula: p_ij = (A_i * A_j) / (r_ij ^ beta)
+     * Where:
+     * - p_ij = probability/attractiveness between locations i and j
+     * - A_i, A_j = attractiveness factors (set to 1 as placeholder)
+     * - r_ij = Euclidean distance between locations i and j
+     * - beta = distance decay parameter (higher values = stronger distance preference)
+     * 
+     * EXPLORATION LOGIC:
+     * ------------------
+     * For unvisited cells: P(j) = p_ij / Σ_k p_ik
+     * - Selects unvisited accessible cells with probability proportional to gravity kernel
+     * - Closer cells have higher probability of being selected
+     * - Ensures water-safe targets using existing safety checks
+     * 
+     * PREFERENTIAL RETURN LOGIC:
+     * --------------------------
+     * For visited cells: P(j) = (f_j * p_ij) / Σ_k (f_k * p_ik)
+     * - f_j = visit frequency for cell j (how many times agent visited)
+     * - Combines frequency preference with distance preference
+     * - Agents prefer returning to frequently visited, nearby locations
+     * 
+     * IMPLEMENTATION BENEFITS:
+     * ------------------------
+     * 1. More realistic movement patterns (distance matters)
+     * 2. Spatial clustering of movement (agents prefer nearby targets)
+     * 3. Frequency-based return preferences (familiar locations prioritized)
+     * 4. Configurable parameters for different movement behaviors
+     * 5. Maintains water avoidance and safety checks
+     * ================================================================================
+     */
 
-        // try to find unvisited accessible cell that's safe from water
-        let attempts = 0; // counter for attempts to find a new target
-        while (attempts < 100 ) { // increased attempts for safe accessible cells
-            // generate random cell coordinates
-            const gridX = Math.floor(Math.random() * gridWidth); // random x coordinate
-            const gridY = Math.floor(Math.random() * gridHeight); // random y coordinate
-            const cellKey = `${gridX},${gridY}`; // create cell key
-
-            // check if the cell never been visited and is accessible (not water)
-            if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
-                const cellCenter = grid.getCellCenter(cellKey);
-                
-                // Additional check: ensure the target is safely away from water
-                if (isPositionSafeFromWater(cellCenter.x, cellCenter.y, agentInput.radius)) {
-                    return cellCenter;
-                }
-            }
-            attempts++;
-        }
-
-        // Fallback: find any accessible cell (visited or unvisited) that's safe from water
-        attempts = 0;
-        while (attempts < 200) {
-            const gridX = Math.floor(Math.random() * gridWidth);
-            const gridY = Math.floor(Math.random() * gridHeight);
-            const cellKey = `${gridX},${gridY}`;
-
-            if (gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
-                const cellCenter = grid.getCellCenter(cellKey);
-                
-                // Check if safe from water
-                if (isPositionSafeFromWater(cellCenter.x, cellCenter.y, agentInput.radius)) {
-                    return cellCenter;
-                }
-            }
-            attempts++;
-        }
-
-        // Final fallback: find any accessible cell (even if close to water, but not in water)
-        attempts = 0;
-        while (attempts < 100) {
-            const gridX = Math.floor(Math.random() * gridWidth);
-            const gridY = Math.floor(Math.random() * gridHeight);
-            const cellKey = `${gridX},${gridY}`;
-
-            if (gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
-                return grid.getCellCenter(cellKey);
-            }
-            attempts++;
-        }
-
-        // Final fallback: return random cell (should rarely happen)
-        const gridX = Math.floor(Math.random() * gridWidth);
-        const gridY = Math.floor(Math.random() * gridHeight);
-        return grid.getCellCenter(`${gridX},${gridY}`);
+    /**
+     * Calculate gravity kernel probability between two locations
+     * Formula: p_ij = (A_i * A_j) / (r_ij ^ beta)
+     * @param {number} distance - Euclidean distance between locations (r_ij)
+     * @param {number} attractiveness1 - Attractiveness of location i (A_i)
+     * @param {number} attractiveness2 - Attractiveness of location j (A_j)
+     * @param {number} beta - Distance decay parameter
+     * @returns {number} Gravity kernel probability p_ij
+     */
+    function calculateGravityKernel(distance, attractiveness1 = GRAVITY_KERNEL_PARAMS.ATTRACTIVENESS, attractiveness2 = GRAVITY_KERNEL_PARAMS.ATTRACTIVENESS, beta = GRAVITY_KERNEL_PARAMS.BETA) {
+        // Prevent division by zero by using minimum distance
+        const effectiveDistance = Math.max(distance, GRAVITY_KERNEL_PARAMS.MIN_DISTANCE);
+        
+        // Calculate gravity kernel: p_ij = (A_i * A_j) / (r_ij ^ beta)
+        const probability = (attractiveness1 * attractiveness2) / Math.pow(effectiveDistance, beta);
+        
+        return probability;
     }
 
-    // function to choose return target (water-aware)
-    function chooseReturnTarget(agentInput) {
+    /**
+     * Choose exploration target using gravity-based probability for unvisited cells
+     * Selects unvisited accessible cells with probability proportional to gravity kernel
+     * Formula: P(j) = p_ij / sum_k p_ik for all unvisited accessible cells k
+     * @param {Object} agentInput - Agent object containing position and visited cells
+     * @returns {Object|null} Target coordinates {x, y} or null if no suitable target found
+     */
+    function chooseGravityBasedExplorationTarget(agentInput) {
+        const gridWidth = Math.ceil(canvas.width / gridSize);
+        const gridHeight = Math.ceil(canvas.height / gridSize);
+        
+        // Collect all unvisited accessible cells that are safe from water
+        const unvisitedCells = [];
+        const probabilities = [];
+        let totalProbability = 0;
+        
+        // Agent's current position for distance calculation
+        const agentX = agentInput.x;
+        const agentY = agentInput.y;
+        
+        // Scan all grid cells to find unvisited accessible ones
+        for (let gridX = 0; gridX < gridWidth; gridX++) {
+            for (let gridY = 0; gridY < gridHeight; gridY++) {
+                const cellKey = `${gridX},${gridY}`;
+                
+                // Check if cell is unvisited and accessible
+                if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
+                    const cellCenter = grid.getCellCenter(cellKey);
+                    
+                    // Additional safety check: ensure target is away from water
+                    if (isPositionSafeFromWater(cellCenter.x, cellCenter.y, agentInput.radius)) {
+                        // Calculate distance from agent to this cell
+                        const distance = Math.sqrt(
+                            Math.pow(agentX - cellCenter.x, 2) + Math.pow(agentY - cellCenter.y, 2)
+                        );
+                        
+                        // Calculate gravity kernel probability
+                        const probability = calculateGravityKernel(distance);
+                        
+                        unvisitedCells.push({
+                            cellKey: cellKey,
+                            center: cellCenter,
+                            distance: distance
+                        });
+                        probabilities.push(probability);
+                        totalProbability += probability;
+                    }
+                }
+            }
+        }
+        
+        // If no unvisited cells found, return null
+        if (unvisitedCells.length === 0 || totalProbability === 0) {
+            console.log("No unvisited accessible cells found for gravity-based exploration");
+            return null;
+        }
+        
+        // Select cell based on probability distribution
+        let randomValue = Math.random() * totalProbability;
+        
+        for (let i = 0; i < unvisitedCells.length; i++) {
+            randomValue -= probabilities[i];
+            if (randomValue <= 0) {
+                console.log(`Gravity-based exploration: selected cell at distance ${unvisitedCells[i].distance.toFixed(1)}`);
+                return unvisitedCells[i].center;
+            }
+        }
+        
+        // Fallback: return last cell (should rarely happen)
+        return unvisitedCells[unvisitedCells.length - 1].center;
+    }
+
+    /**
+     * Choose return target using gravity-based preferential return for visited cells
+     * Selects visited cells with probability proportional to frequency * gravity kernel
+     * Formula: P(j) = (f_j * p_ij) / sum_k (f_k * p_ik) for all visited accessible cells k
+     * @param {Object} agentInput - Agent object containing position, visited cells, and visit frequencies
+     * @returns {Object} Target coordinates {x, y}
+     */
+    function chooseGravityBasedReturnTarget(agentInput) {
         // Get all accessible cells that have been visited by the agent
         const visitedAccessibleCells = Object.keys(agentInput.visitedCells).filter(cellKey => 
             gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE
         );
 
-        // if no visited accessible locations, return home
+        // If no visited accessible locations, return home
         if (visitedAccessibleCells.length === 0) {
+            console.log("No visited accessible cells, returning home");
             return { x: agentInput.house.x, y: agentInput.house.y };
         }
 
-        // calculate total number of visits to accessible cells only
-        const totalVisits = visitedAccessibleCells.reduce((sum, cellKey) =>  
-            sum + agentInput.visitedCells[cellKey], 0
-        );
-
-        // Choose random number between 0 and total visits
-        let randomValue = Math.floor(Math.random() * totalVisits);
-
-        // go through visited accessible cells to find the target cell
+        // Agent's current position for distance calculation
+        const agentX = agentInput.x;
+        const agentY = agentInput.y;
+        
+        // Calculate weighted probabilities: f_j * p_ij for each visited cell
+        const cellData = [];
+        const weightedProbabilities = [];
+        let totalWeightedProbability = 0;
+        
         for (const cellKey of visitedAccessibleCells) {
-            randomValue -= agentInput.visitedCells[cellKey]; // subtract the visit count
-            if (randomValue < 0) {
-                // return the center of the cell as the target
-                return grid.getCellCenter(cellKey);
+            const cellCenter = grid.getCellCenter(cellKey);
+            const frequency = agentInput.visitedCells[cellKey]; // f_j
+            
+            // Calculate distance from agent to this cell
+            const distance = Math.sqrt(
+                Math.pow(agentX - cellCenter.x, 2) + Math.pow(agentY - cellCenter.y, 2)
+            );
+            
+            // Calculate gravity kernel probability p_ij
+            const gravityProbability = calculateGravityKernel(distance);
+            
+            // Calculate weighted probability: f_j * p_ij
+            const weightedProbability = frequency * gravityProbability;
+            
+            cellData.push({
+                cellKey: cellKey,
+                center: cellCenter,
+                frequency: frequency,
+                distance: distance,
+                gravityProbability: gravityProbability
+            });
+            weightedProbabilities.push(weightedProbability);
+            totalWeightedProbability += weightedProbability;
+        }
+        
+        // If total probability is zero (should not happen), fallback to home
+        if (totalWeightedProbability === 0) {
+            console.log("Total weighted probability is zero, returning home");
+            return { x: agentInput.house.x, y: agentInput.house.y };
+        }
+        
+        // Select cell based on weighted probability distribution
+        let randomValue = Math.random() * totalWeightedProbability;
+        
+        for (let i = 0; i < cellData.length; i++) {
+            randomValue -= weightedProbabilities[i];
+            if (randomValue <= 0) {
+                const selectedCell = cellData[i];
+                console.log(`Gravity-based return: selected cell (freq=${selectedCell.frequency}, dist=${selectedCell.distance.toFixed(1)})`);
+                return selectedCell.center;
             }
         }
-
-        // Fallback to agent house
-        console.log("Agent defaulting to return home");
-        return { x: agentInput.house.x, y: agentInput.house.y };
+        
+        // Fallback: return last cell (should rarely happen)
+        const lastCell = cellData[cellData.length - 1];
+        console.log("Fallback to last cell in gravity-based return");
+        return lastCell.center;
     }
-
-
 
     // function to move agent to specific location with pathfinding (like home or work)
     function moveTowardsLocation(agentInput, targetLocationInput) {
@@ -892,7 +1018,7 @@
 
         // Optional: Draw grid for debugging
         drawGrid();
-        drawGridClassification();
+        // drawGridClassification();
 
         // Draw agent trails and paths (if enabled)
         if (showAgentPaths) {
@@ -1114,17 +1240,23 @@
         }
 
         // if agent has no target or has reached the current target, choose a new target
-        // d-EPR model implementation
+        // d-EPR model implementation with gravity kernel density
         if( !agentInput.currentTarget || reachedTarget(agentInput)) {
             // decide whether to explore or return based on d-EPR formula
             const pNew = agentInput.rho * Math.pow(agentInput.uniqueVisitCount, -agentInput.gamma); // calculate the probability of choosing a new target
 
             if (Math.random() < pNew) {
-                // meaning EXPLORE: choose a new unvisited accessible cell
-                agentInput.currentTarget = chooseNewExplorationTarget(agentInput);
+                // meaning EXPLORE: choose a new unvisited accessible cell using gravity-based selection
+                agentInput.currentTarget = chooseGravityBasedExplorationTarget(agentInput);
+                
+                // If no unvisited cells available, switch to return behavior naturally
+                if (!agentInput.currentTarget) {
+                    console.log("No unvisited cells available, switching to gravity-based return");
+                    agentInput.currentTarget = chooseGravityBasedReturnTarget(agentInput);
+                }
             } else {
-                // meaning RETURN: choose a return target from accessible cells
-                agentInput.currentTarget = chooseReturnTarget(agentInput);
+                // meaning RETURN: choose a return target using gravity-based preferential return
+                agentInput.currentTarget = chooseGravityBasedReturnTarget(agentInput);
             }
             agentInput.needsNewPath = true;     // force pathfinding recalculation for new target
         }
