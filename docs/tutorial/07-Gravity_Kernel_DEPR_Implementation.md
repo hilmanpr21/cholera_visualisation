@@ -202,9 +202,9 @@ function calculateGravityKernel(distance, attractiveness1 = GRAVITY_KERNEL_PARAM
 
     -   `attractiveness2 = GRAVITY_KERNEL_PARAMS.ATTRACTIVENESS` → Attractiveness of location j (A_j). Location j is the agent target location
 
-    -    `beta = GRAVITY_KERNEL_PARAMS.BETA` → the distance decay parameter. `beta` equal to `2`
+    -   `beta = GRAVITY_KERNEL_PARAMS.BETA` → the distance decay parameter. `beta` equal to `2`
 
-``` javaScript
+``` javascript
 // Prevent division by zero by using minimum distance
         const effectiveDistance = Math.max(distance, GRAVITY_KERNEL_PARAMS.MIN_DISTANCE);
 ```
@@ -213,7 +213,7 @@ function calculateGravityKernel(distance, attractiveness1 = GRAVITY_KERNEL_PARAM
 
 -   `Math.max` → to choose the highet value between `GRAVITY_KERNEL_PARAMS.MIN_DISTANCE` (which is 1) or the `distance`
 
-``` javaScript
+``` javascript
 // Calculate gravity kernel: p_ij = (A_i * A_j) / (r_ij ^ beta)
 const probability = (attractiveness1 * attractiveness2) / Math.pow(effectiveDistance, beta);
 ```
@@ -224,7 +224,7 @@ const probability = (attractiveness1 * attractiveness2) / Math.pow(effectiveDist
 
 -   safe the kernell calculation to `probability`
 
-``` javaScript
+``` javascript
 return probability;
 ```
 
@@ -329,7 +329,7 @@ function chooseGravityBasedExplorationTarget(agentInput) {
 
 **Breakdown:**
 
-``` javaScript
+``` javascript
 function chooseGravityBasedExplorationTarget(agentInput)
 ```
 
@@ -337,12 +337,182 @@ function chooseGravityBasedExplorationTarget(agentInput)
 
 -   taking parameter `agentInput` → agent object that containing agent current position and visited cells
 
-``` javcaScript
+``` javcascript
 const gridWidth = Math.ceil(canvas.width / gridSize);
 const gridHeight = Math.ceil(canvas.height / gridSize);
 ```
 
--   calculate total grid
+-   calculate how many grid width (x axis) and grid height (y-axis)
+
+``` javascript
+// Collect all unvisited accessible cells that are safe from water
+const unvisitedCells = [];
+const probabilities = [];
+let totalProbability = 0;
+```
+
+-   create empty array to store:
+
+    -   `unvisitedCells` → unvisited cell coordinate
+
+    -   `probabilities` → probability of the unvisited cell coordinate
+
+-   create variable `totalProbability` to store total probability of all unvisited cells
+
+``` javascript
+// Agent's current position for distance calculation
+const agentX = agentInput.x;
+const agentY = agentInput.y;
+```
+
+-   storing agent current position in the local variable
+
+``` javascript
+// Scan all grid cells to find unvisited accessible ones
+for (let gridX = 0; gridX < gridWidth; gridX++) {
+    for (let gridY = 0; gridY < gridHeight; gridY++) {
+        const cellKey = `${gridX},${gridY}`;
+        
+        // Check if cell is unvisited and accessible
+        if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
+            const cellCenter = grid.getCellCenter(cellKey);
+            
+            // Additional safety check: ensure target is away from water
+            
+            // Calculate distance from agent to this cell
+            const distance = Math.sqrt(
+                Math.pow(agentX - cellCenter.x, 2) + Math.pow(agentY - cellCenter.y, 2)
+            );
+            
+            // Calculate gravity kernel probability
+            const probability = calculateGravityKernel(distance);
+            
+            unvisitedCells.push({
+                cellKey: cellKey,
+                center: cellCenter,
+                distance: distance
+            });
+            probabilities.push(probability);
+            totalProbability += probability;
+
+        }
+    }
+}
+```
+
+-   scan all the grid cell to find unvisited accessible (not water) cell
+
+-   `for (let gridX = 0; gridX < gridWidth; gridX++)` → looping for grid in x axis
+
+-   `for (let gridY = 0; gridY < gridHeight; gridY++)` → looping for grid in Y axis
+
+-   \`const cellKey = `` ${gridX},${gridY}` `` → save the the cell coordiante as `cellKey` using template literate
+
+-   `if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE)` → check:
+
+    -   `!agentInput.visitedCells[cellKey]` → current `cellKey` not in the agent's `visitedCells` list
+
+    -   `gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE)` → check in the array \``gridClassification` if `cellKey`'s value `CELL_TYPES.ACCESSIBLE`
+
+-   `const cellCenter = grid.getCellCenter(cellKey);`
+
+    -   store the current grid coordinate in variable `cellCenter`
+
+    -   calculated from function `grid.getCellCenter` with `(cellKey)` as the input
+
+        -   will return `x,y` coordinate value
+
+-   Calculate distance between current loop cell (as location j) with agent current location (location i)
+
+    ``` javascript
+    // Calculate distance from agent to this cell
+    const distance = Math.sqrt(
+        Math.pow(agentX - cellCenter.x, 2) + Math.pow(agentY - cellCenter.y, 2)
+    );
+    ```
+
+    -   using pythagorean
+
+    -   stored in a variable `distance`
+
+-   `const probability = calculateGravityKernel(distance);`
+
+    -   calculate probability of that particular cell using `calculateGravityKernel` function
+
+    -   return the probability value → `p_ij = (A_i * A_j) / (r_ij ^ beta)`
+
+-   Adding the object value to the `unvisitedCells` array
+
+    ``` javascript
+    unvisitedCells.push({
+        cellKey: cellKey,
+        center: cellCenter,
+        distance: distance
+    });
+    ```
+
+    -   pushing `cellKey`, `center` (coordinate), and `distance` for each unvisited cell to the array
+
+-   `probabilities.push(probability);` → pushing probability value of that particular cell to the `probabilities` array
+
+-   `totalProbability += probability;`
+
+    -   `totalProbability += probability` → `totalProbability= totalProbability + probability;`
+
+    -   calculating total probability off all the unvisited cells in the loop so far
+
+``` javascript
+// If no unvisited cells found, return null
+if (unvisitedCells.length === 0 || totalProbability === 0) {
+    console.log("No unvisited accessible cells found for gravity-based exploration");
+    return null;
+}
+```
+
+-   Check if no unvisited cells found
+
+-   return null value
+
+``` javascript
+ // Select cell based on probability distribution
+let randomValue = Math.random() * totalProbability;
+
+for (let i = 0; i < unvisitedCells.length; i++) {
+    randomValue -= probabilities[i];
+    if (randomValue <= 0) {
+        console.log(`Gravity-based exploration: selected cell at distance ${unvisitedCells[i].distance.toFixed(1)}`);
+        return unvisitedCells[i].center;
+    }
+}
+```
+
+-   To draw the selected target coordinate from the `unvisitedCells` array
+
+-   This methods called **Roulette wheel selection** or **Stochastic Selection**
+
+-   `let randomValue = Math.random() * totalProbability;` → calculate random value that normalise by the toal probability (`totalProbabilities`) so the selection will not be bias
+
+-   `for (let i = 0; i < unvisitedCells.length; i++)`
+
+    -   Looping through `unvisitedCells`
+
+-   `randomValue -= probabilities[i];`
+
+    -   `probabilities [i]` is the value of probability with index `i`
+
+    -   it will iterate the probability. On each iteration, the current probability `probabilities[i]` is substracted from the `randomValue`
+
+    -   this process until `randomValue` become less than or equal to zero, at which point indicate the corresponding outcome is selected.
+
+-   `if (randomValue <= 0)`
+
+    -   `randomValue` become less than or equal to zero, at which point indicate the corresponding outcome is selected.
+
+-   `return unvisitedCells[i].center;`
+
+    -   this become the selected grid cells from the `unvisitedCells` array
+
+    -   rerun the cell center
 
 ### Step 4: Implement Gravity-Based Return
 

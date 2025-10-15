@@ -1059,24 +1059,23 @@
                 if (!agentInput.visitedCells[cellKey] && gridClassification[cellKey] === CELL_TYPES.ACCESSIBLE) {
                     const cellCenter = grid.getCellCenter(cellKey);
                     
-                    // Additional safety check: ensure target is away from water
-                    if (isPositionSafeFromWater(cellCenter.x, cellCenter.y, agentInput.radius)) {
-                        // Calculate distance from agent to this cell
-                        const distance = Math.sqrt(
-                            Math.pow(agentX - cellCenter.x, 2) + Math.pow(agentY - cellCenter.y, 2)
-                        );
-                        
-                        // Calculate gravity kernel probability
-                        const probability = calculateGravityKernel(distance);
-                        
-                        unvisitedCells.push({
-                            cellKey: cellKey,
-                            center: cellCenter,
-                            distance: distance
-                        });
-                        probabilities.push(probability);
-                        totalProbability += probability;
-                    }
+                   
+                    // Calculate distance from agent to this cell
+                    const distance = Math.sqrt(
+                        Math.pow(agentX - cellCenter.x, 2) + Math.pow(agentY - cellCenter.y, 2)
+                    );
+                    
+                    // Calculate gravity kernel probability
+                    const probability = calculateGravityKernel(distance);
+                    
+                    unvisitedCells.push({
+                        cellKey: cellKey,
+                        center: cellCenter,
+                        distance: distance
+                    });
+                    probabilities.push(probability);
+                    totalProbability += probability;
+                    
                 }
             }
         }
