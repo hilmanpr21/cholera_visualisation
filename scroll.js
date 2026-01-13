@@ -11,7 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
         sim_seir_1_agent: window.sim_seir_1_agent,
         sim_od_200_agents: window.sim_od_200_agents,
         sim_waterbody_to_contaminated_waterbody: window.sim_waterbody_to_contaminated_waterbody,
-        sim_waterbody_to_contaminated_waterbody_with_house: window.sim_waterbody_to_contaminated_waterbody_with_house
+        sim_waterbody_to_contaminated_waterbody_with_house: window.sim_waterbody_to_contaminated_waterbody_with_house,
+        sim_depr_mobility: window.sim_depr_mobility,
+        sim_depr_mobility_hydration_logic: window.sim_depr_mobility_hydration_logic
     };
     
     // Function to handle step enter (when a new step becomes active)
@@ -62,7 +64,7 @@ document.addEventListener('DOMContentLoaded', function() {
         scroller
             .setup({
                 step: '.step',          // Steps are elements with class 'step'
-                offset: 0.5,            // Trigger when step is 50% in viewport
+                offset: 0.7,            // Trigger when step is 50% in viewport
                 debug: false,           // Set to true to see trigger points
                 progress: false         // We don't need progress updates
             })
@@ -70,13 +72,13 @@ document.addEventListener('DOMContentLoaded', function() {
             .onStepExit(handleStepExit);
         
         // Start the first simulation by default
-        simulations.sim_200_agents.start();
-        currentSimulation = simulations.sim_200_agents;
-        
+        simulations.sim_seir_1_agent.start();
+        currentSimulation = simulations.sim_seir_1_agent;
+
         // Handle window resize
         window.addEventListener('resize', scroller.resize);
     }
     
-    // Initialize
+    // Initialize the scroll function by calling `init()` function
     init();
 });
